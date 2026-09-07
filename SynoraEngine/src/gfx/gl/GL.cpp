@@ -2215,6 +2215,8 @@ void SYN::gfx::gl::Renderer::createZPrepassTechnique() {
         })
         .addFeatureUniform(ShaderFeature::Skinned,
                            [&](Pass &pass, const RenderItem &item) {
+                               if (!item.boneOffset.has_value())
+                                   return;
                                bindBoneMatrices(pass, item.boneOffset.value());
                            })
         .addFeatureUniform(
@@ -2306,6 +2308,8 @@ void SYN::gfx::gl::Renderer::createForwardPassTechnique() {
         })
         .addFeatureUniform(ShaderFeature::Skinned,
                            [&](Pass &pass, const RenderItem &item) {
+                               if (!item.boneOffset.has_value())
+                                   return;
                                bindBoneMatrices(pass, item.boneOffset.value());
                            })
         .addGroup({0, (uint32_t)ShaderFeature::Skinned,
@@ -2338,6 +2342,8 @@ void SYN::gfx::gl::Renderer::createShadowPassTechnique() {
                               : 0)
         .addFeatureUniform(ShaderFeature::Skinned,
                            [&](Pass &pass, const RenderItem &item) {
+                               if (!item.boneOffset.has_value())
+                                   return;
                                bindBoneMatrices(pass, item.boneOffset.value());
                            })
         .addFeatureUniform(
@@ -3603,6 +3609,9 @@ SYN::gfx::gl::Renderer::getRenderItemsByShader(Context &context,
                                     .value_or(mesh.material);
 
             uint32_t shaderFeatures = getShaderFeatures(mesh, material);
+            if (!cmd.boneOffset.has_value()) {
+                shaderFeatures &= ~(uint32_t)(ShaderFeature::Skinned);
+            }
 
             if ((shaderFeatures & shaderIndex) != shaderIndex)
                 continue;
