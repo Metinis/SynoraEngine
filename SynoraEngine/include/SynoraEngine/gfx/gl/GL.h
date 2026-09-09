@@ -16,6 +16,8 @@
 
 #include <SynoraEngine/renderer/backends/IRenderViewBackend.h>
 
+#include <SynoraEngine/renderer/DebugDraw.h>
+
 #ifdef SHADER_DEBUG_PATH
 #define SHADER_PATH SHADER_DEBUG_PATH
 #else
@@ -825,6 +827,8 @@ class Renderer : public IRenderViewBackend {
 
     void init(class EngineContext *context) override;
     void submitFrame(const RenderView3D &sceneDescription) override;
+    void submitLineList(const std::vector<DebugDraw::Line> &lines,
+                        bool depthTest) override;
     void drawScene() override;
 
     void createEnvironment(Context &context, std::string_view name,
@@ -912,6 +916,21 @@ class Renderer : public IRenderViewBackend {
     void createTextureDefaults(Context &context);
     Handle<Texture> createBRDFLut(Context &context);
 
+    struct {
+        Handle<VertexArray> lineVAO;
+        Handle<Buffer> linePrimitiveBuffer;
+
+        // These are depth tested lines. Not a depth buffer.
+        Handle<Buffer> lineDepthBuffer;
+
+        Handle<Buffer> lineOverlayBuffer;
+
+        std::vector<DebugDraw::Line> depthLines;
+        std::vector<DebugDraw::Line> overlayLines;
+    } m_DebugDrawData;
+
+    void createLineData(Context &context);
+
     std::optional<Handle<Texture>>
     loadTexture(Context &context, const AssetRef &texture, bool srgb);
 
@@ -950,6 +969,9 @@ class Renderer : public IRenderViewBackend {
 
     float m_AnisotropicFilter;
     bool m_AnisotropicUpdate = false;
+
+  private:
+    void drawDebugPass(Context &context);
 
   private:
     struct {
