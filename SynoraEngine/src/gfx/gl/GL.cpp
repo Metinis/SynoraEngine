@@ -291,6 +291,40 @@ void setSamplerParameters(uint32_t samplerId,
     glSamplerParameterf(samplerId, GL_TEXTURE_MAX_ANISOTROPY, aniso);
 }
 
+GLenum getPrimitiveType(SYN::gfx::gl::PrimitiveTopology type) {
+    using namespace SYN::gfx::gl;
+    GLenum drawMode = GL_TRIANGLES;
+    switch (type) {
+    case PrimitiveTopology::Triangles:
+        drawMode = GL_TRIANGLES;
+        break;
+    case PrimitiveTopology::Lines:
+        drawMode = GL_LINES;
+        break;
+    case PrimitiveTopology::Points:
+        drawMode = GL_POINTS;
+        break;
+    case PrimitiveTopology::TriangleStrip:
+        drawMode = GL_TRIANGLE_STRIP;
+        break;
+    }
+    return drawMode;
+}
+
+GLenum getIndexType(SYN::gfx::gl::IndexType type) {
+    using namespace SYN::gfx::gl;
+    GLenum indexType = GL_UNSIGNED_SHORT;
+    switch (type) {
+    case IndexType::Unsigned16:
+        indexType = GL_UNSIGNED_SHORT;
+        break;
+    case IndexType::Unsigned32:
+        indexType = GL_UNSIGNED_INT;
+        break;
+    }
+    return indexType;
+}
+
 bool validateShaderCompileStatus(uint32_t shader, bool isVertex) {
     int success = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
@@ -782,72 +816,29 @@ void SYN::gfx::gl::Pass::bindVertexArray(
 }
 
 void SYN::gfx::gl::Pass::draw(uint32_t vertexCount, uint32_t firstVertex) {
-    GLenum drawMode;
-    switch (m_CurrentDrawTopology) {
-    case PrimitiveTopology::Triangles:
-        drawMode = GL_TRIANGLES;
-        break;
-    case PrimitiveTopology::Lines:
-        drawMode = GL_LINES;
-        break;
-    case PrimitiveTopology::Points:
-        drawMode = GL_POINTS;
-        break;
-    }
+    GLenum drawMode = getPrimitiveType(m_CurrentDrawTopology);
     glDrawArrays(drawMode, firstVertex, vertexCount);
 }
 
-void SYN::gfx::gl::Pass::drawIndexed(uint32_t indexCount) {
-    GLenum drawMode;
-    switch (m_CurrentDrawTopology) {
-    case PrimitiveTopology::Triangles:
-        drawMode = GL_TRIANGLES;
-        break;
-    case PrimitiveTopology::Lines:
-        drawMode = GL_LINES;
-        break;
-    case PrimitiveTopology::Points:
-        drawMode = GL_POINTS;
-        break;
-    }
+void SYN::gfx::gl::Pass::drawInstanced(uint32_t vertexCount,
+                                       uint32_t instanceCount,
+                                       uint32_t firstVertex) {
+    GLenum drawMode = getPrimitiveType(m_CurrentDrawTopology);
+    glDrawArraysInstanced(drawMode, firstVertex, vertexCount, instanceCount);
+}
 
-    GLenum indexType;
-    switch (m_CurrentIndexType) {
-    case IndexType::Unsigned16:
-        indexType = GL_UNSIGNED_SHORT;
-        break;
-    case IndexType::Unsigned32:
-        indexType = GL_UNSIGNED_INT;
-        break;
-    }
+void SYN::gfx::gl::Pass::drawIndexed(uint32_t indexCount) {
+    GLenum drawMode = getPrimitiveType(m_CurrentDrawTopology);
+    GLenum indexType = getIndexType(m_CurrentIndexType);
 
     glDrawElements(drawMode, indexCount, indexType, nullptr);
 }
 
 void SYN::gfx::gl::Pass::drawInstancedIndexed(uint32_t indexCount,
                                               uint32_t instanceCount) {
-    GLenum drawMode;
-    switch (m_CurrentDrawTopology) {
-    case PrimitiveTopology::Triangles:
-        drawMode = GL_TRIANGLES;
-        break;
-    case PrimitiveTopology::Lines:
-        drawMode = GL_LINES;
-        break;
-    case PrimitiveTopology::Points:
-        drawMode = GL_POINTS;
-        break;
-    }
+    GLenum drawMode = getPrimitiveType(m_CurrentDrawTopology);
 
-    GLenum indexType;
-    switch (m_CurrentIndexType) {
-    case IndexType::Unsigned16:
-        indexType = GL_UNSIGNED_SHORT;
-        break;
-    case IndexType::Unsigned32:
-        indexType = GL_UNSIGNED_INT;
-        break;
-    }
+    GLenum indexType = getIndexType(m_CurrentIndexType);
 
     glDrawElementsInstanced(drawMode, indexCount, indexType, nullptr,
                             instanceCount);
@@ -1011,7 +1002,10 @@ SYN::gfx::gl::Context::createBuffer(const BufferDesc &desc,
     Buffer buffer;
     buffer.type = desc.bufferType;
     glCreateBuffers(1, &buffer.id);
-    glNamedBufferStorage(buffer.id, desc.size, initialData, memoryUsage);
+
+    if (desc.size > 0) {
+        glNamedBufferStorage(buffer.id, desc.size, initialData, memoryUsage);
+    }
 
     return m_BufferRegistry.createHandle(buffer);
 }
@@ -1023,6 +1017,15 @@ void SYN::gfx::gl::Context::updateBuffer(Handle<Buffer> bufferHandle,
     if (!buffer.has_value())
         return;
     glNamedBufferSubData(buffer.value().id, offset, size, data);
+}
+
+void SYN::gfx::gl::Context::updateBufferAndResize(Handle<Buffer> bufferHandle,
+                                                  uint32_t size,
+                                                  const void *data) {
+    std::optional<Buffer> buffer = m_BufferRegistry.getResource(bufferHandle);
+    if (!buffer.has_value())
+        return;
+    glNamedBufferData(buffer.value().id, size, data, GL_DYNAMIC_DRAW);
 }
 
 void SYN::gfx::gl::Context::deleteBuffer(Handle<Buffer> bufferHandle) {
@@ -1330,7 +1333,8 @@ SYN::gfx::gl::Context::createVertexArray(const VertexArrayDesc &desc) {
     for (uint32_t i = 0; i < desc.attributeCount; ++i) {
         VertexAttribDesc attribute = desc.attributes[i];
         glEnableVertexArrayAttrib(vaoId, attribute.location);
-        glVertexArrayAttribBinding(vaoId, attribute.location, 0);
+        glVertexArrayAttribBinding(vaoId, attribute.location,
+                                   attribute.bindingIndex);
 
         GLenum type = GL_FLOAT;
 
@@ -1375,6 +1379,11 @@ SYN::gfx::gl::Context::createVertexArray(const VertexArrayDesc &desc) {
         }
     }
 
+    for (const auto &divisorDesc : desc.divisors) {
+        glVertexArrayBindingDivisor(vaoId, divisorDesc.bindingIndex,
+                                    divisorDesc.divisor);
+    }
+
     assert(vertexBuffer.value().type == BufferType::Vertex);
     glVertexArrayVertexBuffer(vaoId, 0, vertexBuffer.value().id, 0,
                               desc.vertexBufferStride);
@@ -1388,6 +1397,22 @@ SYN::gfx::gl::Context::createVertexArray(const VertexArrayDesc &desc) {
     }
 
     return m_VertexArrayRegistry.createHandle(VertexArray{vaoId, indexType});
+}
+
+void SYN::gfx::gl::Context::updateVertexArrayVertexBuffer(
+    Handle<VertexArray> vertexArrayHandle, Handle<Buffer> bufferHandle,
+    uint32_t bindingIndex, uint32_t offset, uint32_t stride) {
+    std::optional<VertexArray> vaoOpt =
+        m_VertexArrayRegistry.getResource(vertexArrayHandle);
+    std::optional<Buffer> bufferOpt =
+        m_BufferRegistry.getResource(bufferHandle);
+    if (!vaoOpt.has_value() || !bufferOpt.has_value())
+        return;
+    VertexArray vao = vaoOpt.value();
+    Buffer buffer = bufferOpt.value();
+    assert(buffer.type == BufferType::Vertex &&
+           "Buffer handle should be a vertex buffer.");
+    glVertexArrayVertexBuffer(vao.id, bindingIndex, buffer.id, offset, stride);
 }
 
 void SYN::gfx::gl::Context::deleteVertexArray(
@@ -1978,6 +2003,17 @@ void SYN::gfx::gl::Renderer::submitFrame(const RenderView3D &sceneDescription) {
     }
 }
 
+void SYN::gfx::gl::Renderer::submitLineList(
+    const std::vector<DebugDraw::Line> &lines, bool depthTest) {
+    if (depthTest) {
+        m_DebugDrawData.depthLines.insert(m_DebugDrawData.depthLines.end(),
+                                          lines.cbegin(), lines.cend());
+    } else {
+        m_DebugDrawData.overlayLines.insert(m_DebugDrawData.overlayLines.end(),
+                                            lines.cbegin(), lines.cend());
+    }
+}
+
 void SYN::gfx::gl::Renderer::drawScene() {
     auto [width, height] = m_Window->getScreenSize();
     resize(width, height);
@@ -2158,6 +2194,8 @@ void SYN::gfx::gl::Renderer::initShaderCache() {
     m_ShaderCache.registerShader("irradiance_map", "irradiance_map.glsl");
     m_ShaderCache.registerShader("prefiltered_env", "prefiltered_env.glsl");
     m_ShaderCache.registerShader("z_prepass", "z_prepass.glsl");
+
+    m_ShaderCache.registerShader("lines", "lines.glsl");
 }
 
 void SYN::gfx::gl::Renderer::initDefaultUBOs(Context &context) {
@@ -2215,6 +2253,8 @@ void SYN::gfx::gl::Renderer::createZPrepassTechnique() {
         })
         .addFeatureUniform(ShaderFeature::Skinned,
                            [&](Pass &pass, const RenderItem &item) {
+                               if (!item.boneOffset.has_value())
+                                   return;
                                bindBoneMatrices(pass, item.boneOffset.value());
                            })
         .addFeatureUniform(
@@ -2306,6 +2346,8 @@ void SYN::gfx::gl::Renderer::createForwardPassTechnique() {
         })
         .addFeatureUniform(ShaderFeature::Skinned,
                            [&](Pass &pass, const RenderItem &item) {
+                               if (!item.boneOffset.has_value())
+                                   return;
                                bindBoneMatrices(pass, item.boneOffset.value());
                            })
         .addGroup({0, (uint32_t)ShaderFeature::Skinned,
@@ -2338,6 +2380,8 @@ void SYN::gfx::gl::Renderer::createShadowPassTechnique() {
                               : 0)
         .addFeatureUniform(ShaderFeature::Skinned,
                            [&](Pass &pass, const RenderItem &item) {
+                               if (!item.boneOffset.has_value())
+                                   return;
                                bindBoneMatrices(pass, item.boneOffset.value());
                            })
         .addFeatureUniform(
@@ -2423,6 +2467,51 @@ void SYN::gfx::gl::Renderer::createShadowPassTechnique() {
         });
 }
 
+void SYN::gfx::gl::Renderer::createLineData(Context &context) {
+    m_DebugDrawData.lineDepthBuffer =
+        context.createBuffer({BufferType::Vertex, MemoryUsage::CpuToGPU, 0})
+            .value();
+
+    m_DebugDrawData.lineOverlayBuffer =
+        context.createBuffer({BufferType::Vertex, MemoryUsage::CpuToGPU, 0})
+            .value();
+
+    float vertices[] = {0.0f, -0.5f, 0.0f, 0.0f, 0.5f,  0.0f,
+                        0.0f, 0.5f,  1.0f, 0.0f, -0.5f, 1.0f};
+
+    m_DebugDrawData.linePrimitiveBuffer =
+        context
+            .createBuffer(
+                {BufferType::Vertex, MemoryUsage::CpuToGPU, sizeof(vertices)},
+                &vertices[0])
+            .value();
+
+    VertexArrayDesc vaoDesc;
+    vaoDesc.vertexBufferHandle = m_DebugDrawData.linePrimitiveBuffer;
+    vaoDesc.vertexBufferStride = sizeof(float) * 3;
+
+    // Primitive data
+    vaoDesc.attributes[0] = {0, VertexFormat::Float3, 0, false, 0};
+
+    // Instance Data
+    vaoDesc.attributes[1] = {1, VertexFormat::Float3, 0, false, 1};
+    vaoDesc.attributes[2] = {2, VertexFormat::Float3,
+                             offsetof(DebugDraw::Line, pointB), false, 1};
+    vaoDesc.attributes[3] = {3, VertexFormat::Float4,
+                             offsetof(DebugDraw::Line, color), false, 1};
+
+    vaoDesc.attributeCount = 4;
+
+    std::array<VertexAttribDivisor, 2> divisors = {
+        VertexAttribDivisor{0, 0},
+        VertexAttribDivisor{1, 1},
+    };
+
+    vaoDesc.divisors = divisors;
+
+    m_DebugDrawData.lineVAO = context.createVertexArray(vaoDesc).value();
+}
+
 void SYN::gfx::gl::Renderer::init(EngineContext *engineContext) {
     if (engineContext == nullptr) {
         spdlog::critical(
@@ -2447,6 +2536,7 @@ void SYN::gfx::gl::Renderer::init(EngineContext *engineContext) {
     createSkybox(*m_Context);
     createCSM(*m_Context);
     createTextureDefaults(*m_Context);
+    createLineData(*m_Context);
 
     m_BRDFLut = createBRDFLut(*m_Context);
 
@@ -3214,6 +3304,8 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
                 pass.bindVertexArray(m_SkyboxCube.value());
                 pass.draw(36);
             }
+
+            drawDebugPass(context);
         }
 
         context.blitFramebuffer(m_MsaaFramebuffer.handle,
@@ -3603,6 +3695,9 @@ SYN::gfx::gl::Renderer::getRenderItemsByShader(Context &context,
                                     .value_or(mesh.material);
 
             uint32_t shaderFeatures = getShaderFeatures(mesh, material);
+            if (!cmd.boneOffset.has_value()) {
+                shaderFeatures &= ~(uint32_t)(ShaderFeature::Skinned);
+            }
 
             if ((shaderFeatures & shaderIndex) != shaderIndex)
                 continue;
@@ -3730,4 +3825,66 @@ SYN::gfx::gl::Renderer::loadMaterial(Context &context,
     material.alphaCutoff = materialData.alphaCutoff;
 
     return material;
+}
+
+void SYN::gfx::gl::Renderer::drawDebugPass(Context &context) {
+    TracyGpuZone("Debug Draw Pass");
+    ZoneScopedN("Debug Draw Pass");
+
+    Viewport renderViewport = m_ScreenViewport;
+    auto [renderWidth, renderHeight] = getRenderResolution();
+    renderViewport.width = renderWidth;
+    renderViewport.height = renderHeight;
+
+    const std::vector<DebugDraw::Line> depthLines = m_DebugDrawData.depthLines;
+    const std::vector<DebugDraw::Line> overlayLines =
+        m_DebugDrawData.overlayLines;
+
+    PipelineState linePipeline;
+    linePipeline.shader = m_ShaderCache.getShaderHandle(context, "lines", 0);
+    linePipeline.topology = PrimitiveTopology::TriangleStrip;
+    linePipeline.depth.writeEnabled = false;
+
+    if (depthLines.size() > 0) {
+        context.updateBufferAndResize(
+            m_DebugDrawData.lineDepthBuffer,
+            sizeof(DebugDraw::Line) * depthLines.size(), &depthLines[0]);
+
+        context.updateVertexArrayVertexBuffer(m_DebugDrawData.lineVAO,
+                                              m_DebugDrawData.lineDepthBuffer,
+                                              1, 0, sizeof(DebugDraw::Line));
+
+        Pass depthLinePass =
+            context.beginPass({m_MsaaFramebuffer.handle, std::nullopt, false,
+                               true, false, renderViewport, std::nullopt});
+
+        depthLinePass.usePipeline(linePipeline);
+        depthLinePass.bindUniform("u_resolution", (float)renderViewport.width,
+                                  (float)renderViewport.height);
+        depthLinePass.bindVertexArray(m_DebugDrawData.lineVAO);
+        depthLinePass.drawInstanced(4, depthLines.size());
+    }
+
+    if (overlayLines.size() > 0) {
+        context.updateBufferAndResize(
+            m_DebugDrawData.lineOverlayBuffer,
+            sizeof(DebugDraw::Line) * overlayLines.size(), &overlayLines[0]);
+
+        context.updateVertexArrayVertexBuffer(m_DebugDrawData.lineVAO,
+                                              m_DebugDrawData.lineOverlayBuffer,
+                                              1, 0, sizeof(DebugDraw::Line));
+
+        Pass overlayLinePass =
+            context.beginPass({m_MsaaFramebuffer.handle, std::nullopt, false,
+                               false, false, renderViewport, std::nullopt});
+
+        overlayLinePass.usePipeline(linePipeline);
+        overlayLinePass.bindUniform("u_resolution", (float)renderViewport.width,
+                                    (float)renderViewport.height);
+        overlayLinePass.bindVertexArray(m_DebugDrawData.lineVAO);
+        overlayLinePass.drawInstanced(4, overlayLines.size());
+    }
+
+    m_DebugDrawData.depthLines.clear();
+    m_DebugDrawData.overlayLines.clear();
 }

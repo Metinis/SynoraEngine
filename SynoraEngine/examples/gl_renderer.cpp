@@ -42,6 +42,8 @@ class GraphicsScene : public SYN::ILayer {
 
         m_Renderer = static_cast<gl::Renderer *>(engineContext->renderer.get());
 
+        m_DebugDraw = engineContext->debugDraw.get();
+
         m_SphereScene = m_SceneManager->createScene("Sphere");
         m_CabinScene = m_SceneManager->createScene("Cabin");
 
@@ -293,10 +295,21 @@ class GraphicsScene : public SYN::ILayer {
         }
     }
 
-    void onRender() override {}
+    void onRender() override {
+        if (m_DrawDebugLines) {
+            m_DebugDraw->line(glm::vec3(0.0f), glm::vec3(10.0f),
+                              glm::vec3(1.0, 0.0, 0.0));
+            m_DebugDraw->line(glm::vec3(10.0f), glm::vec3(0.0, 0.0, 20.0f),
+                              glm::vec3(0.0, 1.0, 0.0), 5.0f);
+            m_DebugDraw->aabb(glm::vec3(0.0f), glm::vec3(-10.0f),
+                              glm::vec3(1.0f, 1.0f, 0.0f), 1.0f, false);
+        }
+    }
 
     void onUIRender() override {
         if (ImGui::Begin("Renderer Config")) {
+            ImGui::Checkbox("Test debug lines", &m_DrawDebugLines);
+
             const char *aa[] = {"None", "FXAA", "MSAA 2x", "MSAA 4x",
                                 "MSAA 8x"};
             if (ImGui::Combo("Anti Aliasing", (int *)&m_AntiAliasMode, aa,
@@ -485,6 +498,8 @@ class GraphicsScene : public SYN::ILayer {
     gl::Context *m_Context;
     SYN::Window *m_Window;
     gl::Renderer *m_Renderer;
+    SYN::DebugDraw *m_DebugDraw;
+
     SYN::SceneManager *m_SceneManager;
     SYN::AssetManager *m_AssetManager;
 
@@ -527,6 +542,8 @@ class GraphicsScene : public SYN::ILayer {
     // Animation controls
     bool m_IsPlaying = false;
     bool m_IsLooping = false;
+
+    bool m_DrawDebugLines = false;
 
     glm::vec3 m_Color;
 

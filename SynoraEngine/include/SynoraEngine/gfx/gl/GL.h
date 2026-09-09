@@ -16,6 +16,8 @@
 
 #include <SynoraEngine/renderer/backends/IRenderViewBackend.h>
 
+#include <SynoraEngine/renderer/DebugDraw.h>
+
 #ifdef SHADER_DEBUG_PATH
 #define SHADER_PATH SHADER_DEBUG_PATH
 #else
@@ -67,7 +69,12 @@ enum class TextureFormat : uint8_t {
     RGB32F,
     RGBA32F
 };
-enum class PrimitiveTopology : uint8_t { Triangles, Lines, Points };
+enum class PrimitiveTopology : uint8_t {
+    Triangles,
+    Lines,
+    Points,
+    TriangleStrip
+};
 
 enum class TextureType : uint8_t { Tex2D, Cubemap, Tex2DArray };
 
@@ -354,6 +361,12 @@ struct VertexAttribDesc {
     VertexFormat format;
     uint32_t offset;
     bool normalized = false;
+    uint32_t bindingIndex = 0;
+};
+
+struct VertexAttribDivisor {
+    uint32_t bindingIndex;
+    uint32_t divisor;
 };
 
 struct VertexArrayDesc {
@@ -364,6 +377,7 @@ struct VertexArrayDesc {
     std::array<VertexAttribDesc, MAX_VERTEX_ATTRIBUTES> attributes;
     uint32_t attributeCount;
     IndexType indexType = IndexType::Unsigned32;
+    std::span<const VertexAttribDivisor> divisors;
 };
 
 struct Vertex {
@@ -541,6 +555,9 @@ class Pass {
 
     void draw(uint32_t vertexCount, uint32_t firstVertex = 0);
     void drawIndexed(uint32_t indexCount);
+
+    void drawInstanced(uint32_t vertexCount, uint32_t instanceCount,
+                       uint32_t firstVertex = 0);
     void drawInstancedIndexed(uint32_t indexCount, uint32_t instanceCount);
 
   private:
@@ -573,6 +590,11 @@ class Context {
 
     void updateBuffer(Handle<Buffer> bufferHandle, uint32_t offset,
                       uint32_t size, const void *data);
+
+    // Uses glNamedBufferData
+    void updateBufferAndResize(Handle<Buffer> bufferHandle, uint32_t size,
+                               const void *data);
+
     void deleteBuffer(Handle<Buffer> bufferHandle);
 
     std::optional<Handle<Texture>>
@@ -623,6 +645,11 @@ class Context {
 
     std::optional<Handle<VertexArray>>
     createVertexArray(const VertexArrayDesc &desc);
+
+    void updateVertexArrayVertexBuffer(Handle<VertexArray> vertexArrayHandle,
+                                       Handle<Buffer> bufferHandle,
+                                       uint32_t bindingIndex, uint32_t offset,
+                                       uint32_t stride);
 
     void deleteVertexArray(Handle<VertexArray> vertexArrayHandle);
 
@@ -800,6 +827,8 @@ class Renderer : public IRenderViewBackend {
 
     void init(class EngineContext *context) override;
     void submitFrame(const RenderView3D &sceneDescription) override;
+    void submitLineList(const std::vector<DebugDraw::Line> &lines,
+                        bool depthTest) override;
     void drawScene() override;
 
     void createEnvironment(Context &context, std::string_view name,
@@ -887,6 +916,21 @@ class Renderer : public IRenderViewBackend {
     void createTextureDefaults(Context &context);
     Handle<Texture> createBRDFLut(Context &context);
 
+    struct {
+        Handle<VertexArray> lineVAO;
+        Handle<Buffer> linePrimitiveBuffer;
+
+        // These are depth tested lines. Not a depth buffer.
+        Handle<Buffer> lineDepthBuffer;
+
+        Handle<Buffer> lineOverlayBuffer;
+
+        std::vector<DebugDraw::Line> depthLines;
+        std::vector<DebugDraw::Line> overlayLines;
+    } m_DebugDrawData;
+
+    void createLineData(Context &context);
+
     std::optional<Handle<Texture>>
     loadTexture(Context &context, const AssetRef &texture, bool srgb);
 
@@ -925,6 +969,9 @@ class Renderer : public IRenderViewBackend {
 
     float m_AnisotropicFilter;
     bool m_AnisotropicUpdate = false;
+
+  private:
+    void drawDebugPass(Context &context);
 
   private:
     struct {

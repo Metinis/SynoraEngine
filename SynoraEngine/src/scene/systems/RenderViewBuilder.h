@@ -17,6 +17,7 @@ class RenderViewBuilder : public ILayer {
 
   private:
     class SceneManager *m_SceneManager;
+    class DebugDraw *m_DebugDraw;
     class IRenderViewBackend *m_Renderer;
 };
 } // namespace SYN
