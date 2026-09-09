@@ -303,11 +303,37 @@ class GraphicsScene : public SYN::ILayer {
                               glm::vec3(0.0, 1.0, 0.0), 5.0f);
             m_DebugDraw->aabb(glm::vec3(0.0f), glm::vec3(-10.0f),
                               glm::vec3(1.0f, 1.0f, 0.0f), 1.0f, false);
+            m_DebugDraw->cameraFrustum(m_CameraView, m_CameraProj,
+                                       glm::vec3(0.0f, 1.0f, 1.0f));
         }
     }
 
     void onUIRender() override {
         if (ImGui::Begin("Renderer Config")) {
+
+            if (ImGui::Button("Update debug frustum")) {
+                SYN::Scene *scene = m_SceneManager->getSceneMut(
+                    m_SceneManager->getActiveScene());
+
+                scene->forEach<SYN::CameraComponent, SYN::TransformComponent>(
+                    [&](SYN::Entity e, SYN::CameraComponent &camera,
+                        SYN::TransformComponent &transform) {
+                        if (camera.isPrimary) {
+                            glm::vec3 position = transform.position;
+                            glm::vec3 target =
+                                position + (transform.rotation *
+                                            glm::vec3(0.0f, 0.0f, -1.0f));
+                            glm::vec3 up =
+                                transform.rotation * glm::vec3(0.0f, 1.0f, 0.0);
+
+                            m_CameraView = glm::lookAtRH(position, target, up);
+                            m_CameraProj = glm::perspectiveRH(
+                                glm::radians(camera.fovDegrees),
+                                camera.aspectRatio, camera.nearPlane, 10.0f);
+                        }
+                    });
+            }
+
             ImGui::Checkbox("Test debug lines", &m_DrawDebugLines);
 
             const char *aa[] = {"None", "FXAA", "MSAA 2x", "MSAA 4x",
@@ -505,6 +531,9 @@ class GraphicsScene : public SYN::ILayer {
 
     SYN::SceneHandle m_CabinScene;
     SYN::SceneHandle m_SphereScene;
+
+    glm::mat4 m_CameraView = glm::mat4(1.0f);
+    glm::mat4 m_CameraProj = glm::mat4(1.0f);
 
     float m_FrameHistory[120] = {};
     int m_FrameIdx = 0;
