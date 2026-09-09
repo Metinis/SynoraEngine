@@ -1380,7 +1380,8 @@ SYN::gfx::gl::Context::createVertexArray(const VertexArrayDesc &desc) {
     }
 
     for (const auto &divisorDesc : desc.divisors) {
-        glVertexAttribDivisor(divisorDesc.bindingIndex, divisorDesc.divisor);
+        glVertexArrayBindingDivisor(vaoId, divisorDesc.bindingIndex,
+                                    divisorDesc.divisor);
     }
 
     assert(vertexBuffer.value().type == BufferType::Vertex);
@@ -2002,6 +2003,17 @@ void SYN::gfx::gl::Renderer::submitFrame(const RenderView3D &sceneDescription) {
     }
 }
 
+void SYN::gfx::gl::Renderer::submitLineList(
+    const std::vector<DebugDraw::Line> &lines, bool depthTest) {
+    if (depthTest) {
+        m_DebugDrawData.depthLines.insert(m_DebugDrawData.depthLines.end(),
+                                          lines.cbegin(), lines.cend());
+    } else {
+        m_DebugDrawData.overlayLines.insert(m_DebugDrawData.overlayLines.end(),
+                                            lines.cbegin(), lines.cend());
+    }
+}
+
 void SYN::gfx::gl::Renderer::drawScene() {
     auto [width, height] = m_Window->getScreenSize();
     resize(width, height);
@@ -2182,6 +2194,8 @@ void SYN::gfx::gl::Renderer::initShaderCache() {
     m_ShaderCache.registerShader("irradiance_map", "irradiance_map.glsl");
     m_ShaderCache.registerShader("prefiltered_env", "prefiltered_env.glsl");
     m_ShaderCache.registerShader("z_prepass", "z_prepass.glsl");
+
+    m_ShaderCache.registerShader("lines", "lines.glsl");
 }
 
 void SYN::gfx::gl::Renderer::initDefaultUBOs(Context &context) {
@@ -2453,6 +2467,51 @@ void SYN::gfx::gl::Renderer::createShadowPassTechnique() {
         });
 }
 
+void SYN::gfx::gl::Renderer::createLineData(Context &context) {
+    m_DebugDrawData.lineDepthBuffer =
+        context.createBuffer({BufferType::Vertex, MemoryUsage::CpuToGPU, 0})
+            .value();
+
+    m_DebugDrawData.lineOverlayBuffer =
+        context.createBuffer({BufferType::Vertex, MemoryUsage::CpuToGPU, 0})
+            .value();
+
+    float vertices[] = {0.0f, -0.5f, 0.0f, 0.0f, 0.5f,  0.0f,
+                        0.0f, 0.5f,  1.0f, 0.0f, -0.5f, 1.0f};
+
+    m_DebugDrawData.linePrimitiveBuffer =
+        context
+            .createBuffer(
+                {BufferType::Vertex, MemoryUsage::CpuToGPU, sizeof(vertices)},
+                &vertices[0])
+            .value();
+
+    VertexArrayDesc vaoDesc;
+    vaoDesc.vertexBufferHandle = m_DebugDrawData.linePrimitiveBuffer;
+    vaoDesc.vertexBufferStride = sizeof(float) * 3;
+
+    // Primitive data
+    vaoDesc.attributes[0] = {0, VertexFormat::Float3, 0, false, 0};
+
+    // Instance Data
+    vaoDesc.attributes[1] = {1, VertexFormat::Float3, 0, false, 1};
+    vaoDesc.attributes[2] = {2, VertexFormat::Float3,
+                             offsetof(DebugDraw::Line, pointB), false, 1};
+    vaoDesc.attributes[3] = {3, VertexFormat::Float4,
+                             offsetof(DebugDraw::Line, color), false, 1};
+
+    vaoDesc.attributeCount = 4;
+
+    std::array<VertexAttribDivisor, 2> divisors = {
+        VertexAttribDivisor{0, 0},
+        VertexAttribDivisor{1, 1},
+    };
+
+    vaoDesc.divisors = divisors;
+
+    m_DebugDrawData.lineVAO = context.createVertexArray(vaoDesc).value();
+}
+
 void SYN::gfx::gl::Renderer::init(EngineContext *engineContext) {
     if (engineContext == nullptr) {
         spdlog::critical(
@@ -2477,6 +2536,7 @@ void SYN::gfx::gl::Renderer::init(EngineContext *engineContext) {
     createSkybox(*m_Context);
     createCSM(*m_Context);
     createTextureDefaults(*m_Context);
+    createLineData(*m_Context);
 
     m_BRDFLut = createBRDFLut(*m_Context);
 
@@ -3244,6 +3304,8 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
                 pass.bindVertexArray(m_SkyboxCube.value());
                 pass.draw(36);
             }
+
+            drawDebugPass(context);
         }
 
         context.blitFramebuffer(m_MsaaFramebuffer.handle,
@@ -3763,4 +3825,66 @@ SYN::gfx::gl::Renderer::loadMaterial(Context &context,
     material.alphaCutoff = materialData.alphaCutoff;
 
     return material;
+}
+
+void SYN::gfx::gl::Renderer::drawDebugPass(Context &context) {
+    TracyGpuZone("Debug Draw Pass");
+    ZoneScopedN("Debug Draw Pass");
+
+    Viewport renderViewport = m_ScreenViewport;
+    auto [renderWidth, renderHeight] = getRenderResolution();
+    renderViewport.width = renderWidth;
+    renderViewport.height = renderHeight;
+
+    const std::vector<DebugDraw::Line> depthLines = m_DebugDrawData.depthLines;
+    const std::vector<DebugDraw::Line> overlayLines =
+        m_DebugDrawData.overlayLines;
+
+    PipelineState linePipeline;
+    linePipeline.shader = m_ShaderCache.getShaderHandle(context, "lines", 0);
+    linePipeline.topology = PrimitiveTopology::TriangleStrip;
+    linePipeline.depth.writeEnabled = false;
+
+    if (depthLines.size() > 0) {
+        context.updateBufferAndResize(
+            m_DebugDrawData.lineDepthBuffer,
+            sizeof(DebugDraw::Line) * depthLines.size(), &depthLines[0]);
+
+        context.updateVertexArrayVertexBuffer(m_DebugDrawData.lineVAO,
+                                              m_DebugDrawData.lineDepthBuffer,
+                                              1, 0, sizeof(DebugDraw::Line));
+
+        Pass depthLinePass =
+            context.beginPass({m_MsaaFramebuffer.handle, std::nullopt, false,
+                               true, false, renderViewport, std::nullopt});
+
+        depthLinePass.usePipeline(linePipeline);
+        depthLinePass.bindUniform("u_resolution", (float)renderViewport.width,
+                                  (float)renderViewport.height);
+        depthLinePass.bindVertexArray(m_DebugDrawData.lineVAO);
+        depthLinePass.drawInstanced(4, depthLines.size());
+    }
+
+    if (overlayLines.size() > 0) {
+        context.updateBufferAndResize(
+            m_DebugDrawData.lineOverlayBuffer,
+            sizeof(DebugDraw::Line) * overlayLines.size(), &overlayLines[0]);
+
+        context.updateVertexArrayVertexBuffer(m_DebugDrawData.lineVAO,
+                                              m_DebugDrawData.lineOverlayBuffer,
+                                              1, 0, sizeof(DebugDraw::Line));
+
+        Pass overlayLinePass =
+            context.beginPass({m_MsaaFramebuffer.handle, std::nullopt, false,
+                               false, false, renderViewport, std::nullopt});
+
+        overlayLinePass.usePipeline(linePipeline);
+        overlayLinePass.bindUniform("u_resolution", (float)renderViewport.width,
+                                    (float)renderViewport.height);
+        overlayLinePass.bindVertexArray(m_DebugDrawData.lineVAO);
+        overlayLinePass.drawInstanced(4, overlayLines.size());
+    }
+
+    m_DebugDrawData.depthLines.clear();
+    m_DebugDrawData.overlayLines.clear();
 }
