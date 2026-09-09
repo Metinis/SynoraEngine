@@ -1,5 +1,7 @@
 #include <SynoraEngine/renderer/DebugDraw.h>
 
+#include <SynoraEngine/core/math/Frustum.h>
+
 namespace SYN {
 void DebugDraw::line(glm::vec3 a, glm::vec3 b, glm::vec3 color, float thickness,
                      bool depthTest) {
@@ -51,6 +53,30 @@ void DebugDraw::aabb(glm::vec3 min, glm::vec3 max, glm::vec3 color,
     line(b, f, color, thickness, depthTest);
     line(c, g, color, thickness, depthTest);
     line(d, h, color, thickness, depthTest);
+}
+
+void DebugDraw::cameraFrustum(glm::mat4 view, glm::mat4 projection,
+                              glm::vec3 color, float thickness,
+                              bool depthTest) {
+    std::vector<glm::vec4> corners =
+        Frustum::getCornersWorldSpace(view, projection);
+
+    line(corners[0], corners[1], color, thickness, depthTest);
+    line(corners[0], corners[4], color, thickness, depthTest);
+    line(corners[0], corners[2], color, thickness, depthTest);
+
+    line(corners[5], corners[4], color, thickness, depthTest);
+    line(corners[5], corners[1], color, thickness, depthTest);
+    line(corners[5], corners[7], color, thickness, depthTest);
+
+    line(corners[2], corners[3], color, thickness, depthTest);
+    line(corners[2], corners[6], color, thickness, depthTest);
+
+    line(corners[7], corners[3], color, thickness, depthTest);
+    line(corners[7], corners[6], color, thickness, depthTest);
+
+    line(corners[4], corners[6], color, thickness, depthTest);
+    line(corners[1], corners[3], color, thickness, depthTest);
 }
 
 void DebugDraw::clear() {

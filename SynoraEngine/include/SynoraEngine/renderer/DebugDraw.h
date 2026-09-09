@@ -17,6 +17,8 @@ class DebugDraw {
               bool depthTest = true);
     void aabb(glm::vec3 min, glm::vec3 max, glm::vec3 color,
               float thickness = 1.0f, bool depthTest = true);
+    void cameraFrustum(glm::mat4 view, glm::mat4 projection, glm::vec3 color,
+                       float thickness = 1.0f, bool depthTest = true);
 
     // Call at the end of the frame to clear all previously submitted draw data.
     void clear();
