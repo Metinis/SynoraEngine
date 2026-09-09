@@ -13,6 +13,7 @@ class SceneManager;
 class CameraSystem;
 class AnimationPlayerSystem;
 class RenderViewBuilder;
+class DebugDraw;
 
 namespace gfx {
 namespace gl {
@@ -25,6 +26,7 @@ struct EngineContext {
     std::unique_ptr<gfx::gl::Context> glContext;
     ProjectConfig projectConfig;
     std::unique_ptr<Input> inputManager;
+    std::unique_ptr<DebugDraw> debugDraw;
     std::unique_ptr<IRenderViewBackend> renderer;
     std::unique_ptr<SceneManager> sceneManager;
 

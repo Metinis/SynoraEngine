@@ -14,6 +14,7 @@
 #include <SynoraEngine/gfx/gl/GL.h>
 #include <SynoraEngine/project/AssetManager.h>
 #include <SynoraEngine/project/Project.h>
+#include <SynoraEngine/renderer/DebugDraw.h>
 #include <SynoraEngine/renderer/backends/IRenderViewBackend.h>
 #include <SynoraEngine/scene/SceneManager.h>
 
@@ -35,6 +36,7 @@ Application::Application() {
     m_EngineContext.cameraSystem = std::make_unique<CameraSystem>();
     m_EngineContext.animationPlayerSystem =
         std::make_unique<AnimationPlayerSystem>();
+    m_EngineContext.debugDraw = std::make_unique<DebugDraw>();
     m_EngineContext.renderViewBuilder = std::make_unique<RenderViewBuilder>();
 
     ProjectConfig projectConfig{
@@ -130,6 +132,7 @@ void Application::run() {
             context->flushDeferredDeletes();
         }
         m_EngineContext.renderer->onEndFrame();
+        m_EngineContext.debugDraw->clear();
         m_EngineContext.projectConfig.assetManager->resolvePendingDeletions();
         FrameMark;
     }
