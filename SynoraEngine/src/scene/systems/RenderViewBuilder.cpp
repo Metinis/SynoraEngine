@@ -1,6 +1,7 @@
 #include "RenderViewBuilder.h"
 
 #include <SynoraEngine/core/Application.h>
+#include <SynoraEngine/renderer/DebugDraw.h>
 #include <SynoraEngine/renderer/backends/IRenderViewBackend.h>
 #include <SynoraEngine/scene/SceneManager.h>
 #include <SynoraEngine/scene/components/Components.h>
@@ -11,6 +12,7 @@ namespace SYN {
 void RenderViewBuilder::init(EngineContext *context) {
     m_SceneManager = context->sceneManager.get();
     m_Renderer = context->renderer.get();
+    m_DebugDraw = context->debugDraw.get();
 }
 
 void RenderViewBuilder::onAttach() {
@@ -60,6 +62,14 @@ void RenderViewBuilder::onRender() {
                     modelIndex, animation.player.getOutput());
             }
         });
+
+    if (!m_DebugDraw->m_LinesDepth.empty()) {
+        m_Renderer->submitLineList(m_DebugDraw->m_LinesDepth, true);
+    }
+
+    if (!m_DebugDraw->m_LinesNoDepth.empty()) {
+        m_Renderer->submitLineList(m_DebugDraw->m_LinesNoDepth, false);
+    }
 
     m_Renderer->submitFrame(renderView);
 }
