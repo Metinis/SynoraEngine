@@ -57,81 +57,6 @@ createDefaultColoredTexture(SYN::gfx::gl::Context &context,
     return context.createTexture(desc, &color[0]).value();
 }
 
-glm::vec3 SYN::gfx::gl::AABB::getPVertex(glm::vec3 normal) const {
-    AABB aabb = *this;
-
-    float x = normal.x >= 0 ? aabb.max.x : aabb.min.x;
-    float y = normal.y >= 0 ? aabb.max.y : aabb.min.y;
-    float z = normal.z >= 0 ? aabb.max.z : aabb.min.z;
-
-    return glm::vec3(x, y, z);
-}
-
-glm::vec3 SYN::gfx::gl::AABB::getNVertex(glm::vec3 normal) const {
-    AABB aabb = *this;
-
-    float x = normal.x >= 0 ? aabb.min.x : aabb.max.x;
-    float y = normal.y >= 0 ? aabb.min.y : aabb.max.y;
-    float z = normal.z >= 0 ? aabb.min.z : aabb.max.z;
-
-    return glm::vec3(x, y, z);
-}
-
-bool SYN::gfx::gl::AABB::collidesWithFrustum(
-    const std::vector<Plane> &frustum) const {
-    for (Plane plane : frustum) {
-        glm::vec3 planeNormal = glm::vec3(plane.a, plane.b, plane.c);
-        glm::vec3 pVertex = getPVertex(planeNormal);
-
-        if (glm::dot(planeNormal, pVertex) < -plane.d)
-            return false;
-    }
-    return true;
-}
-
-SYN::gfx::gl::AABB SYN::gfx::gl::AABB::transform(glm::mat4 transform) const {
-    AABB aabb = *this;
-
-    glm::vec3 min = aabb.min;
-    glm::vec3 max = aabb.max;
-
-    float lengthX = max.x - min.x;
-    float lengthY = max.y - min.y;
-    float lengthZ = max.z - min.z;
-
-    std::array<glm::vec3, 8> worldPoints = {
-        min,
-        min + glm::vec3(lengthX, 0, 0),
-        min + glm::vec3(lengthX, 0, lengthZ),
-        min + glm::vec3(0, 0, lengthZ),
-        min + glm::vec3(0, lengthY, 0),
-        min + glm::vec3(lengthX, lengthY, 0),
-        min + glm::vec3(0, lengthY, lengthZ),
-        max};
-
-    for (glm::vec3 &worldPoint : worldPoints) {
-        worldPoint = transform * glm::vec4(worldPoint, 1.0f);
-    }
-
-    float minFloat = std::numeric_limits<float>().lowest();
-    float maxFloat = std::numeric_limits<float>().max();
-
-    glm::vec3 newMin(maxFloat, maxFloat, maxFloat);
-    glm::vec3 newMax(minFloat, minFloat, minFloat);
-
-    for (glm::vec3 worldPoint : worldPoints) {
-        newMin.x = glm::min(newMin.x, worldPoint.x);
-        newMin.y = glm::min(newMin.y, worldPoint.y);
-        newMin.z = glm::min(newMin.z, worldPoint.z);
-
-        newMax.x = glm::max(newMax.x, worldPoint.x);
-        newMax.y = glm::max(newMax.y, worldPoint.y);
-        newMax.z = glm::max(newMax.z, worldPoint.z);
-    }
-
-    return {newMin, newMax};
-}
-
 SYN::gfx::gl::Handle<SYN::gfx::gl::Shader>
 createDefaultShader(SYN::gfx::gl::Context &context) {
     std::string defaultVertexSource = R"(
@@ -3128,7 +3053,7 @@ void SYN::gfx::gl::Renderer::drawRenderItems(Context &context,
             if (groupStateIt == m_GroupStateCache.cend()) {
                 std::vector<RenderItem> itemsCopy = *items;
                 if (groupDesc.cull)
-                    frustumCullRenderItems(itemsCopy, m_FrustumPlanes);
+                    frustumCullRenderItems(itemsCopy);
                 if (groupDesc.sort)
                     sortRenderItems(itemsCopy);
 
@@ -3264,7 +3189,16 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
                              &lightConstants);
     }
 
-    m_FrustumPlanes = planesFromCameraFrustum(m_MainCamera);
+    {
+        glm::mat4 view = glm::lookAtRH(m_MainCamera.position,
+                                       m_MainCamera.target, m_MainCamera.up);
+
+        glm::mat4 projection = glm::perspectiveRH(
+            glm::radians(m_MainCamera.fovYDegrees), m_MainCamera.aspect,
+            m_MainCamera.nearPlane, m_MainCamera.farPlane);
+
+        m_CurrentFrustum = Frustum::fromViewProjectionMatrix(view, projection);
+    }
     auto environmentIt = m_NameToEnvironment.find(m_CurrentEnvironment);
 
     if (m_DirectionalLight.castsShadows) {
@@ -3384,76 +3318,23 @@ void SYN::gfx::gl::Renderer::resize(int width, int height) {
     m_HdrFramebuffer.update = true;
 }
 
-std::vector<SYN::gfx::gl::Plane>
-SYN::gfx::gl::Renderer::planesFromCameraFrustum(const Camera &camera) {
-    glm::mat4 viewMatrix =
-        glm::lookAtRH(camera.position, camera.target, camera.up);
-
-    glm::mat4 projMatrix =
-        glm::perspectiveRH_NO(glm::radians(camera.fovYDegrees), camera.aspect,
-                              camera.nearPlane, camera.farPlane);
-
-    // Transpose because math below assumes row major
-    glm::mat4 vp = glm::transpose(projMatrix * viewMatrix);
-
-    // Normals of planes aren't normalized. Doesn't matter
-    // because only the sign is needed for frustum culling case
-    std::vector<Plane> planes{
-        // Left Plane
-        Plane{vp[3][0] + vp[0][0], vp[3][1] + vp[0][1], vp[3][2] + vp[0][2],
-              vp[3][3] + vp[0][3]},
-        // Right Plane
-        Plane{vp[3][0] - vp[0][0], vp[3][1] - vp[0][1], vp[3][2] - vp[0][2],
-              vp[3][3] - vp[0][3]},
-        // Bottom Plane
-        Plane{vp[3][0] + vp[1][0], vp[3][1] + vp[1][1], vp[3][2] + vp[1][2],
-              vp[3][3] + vp[1][3]},
-        // Top Plane
-        Plane{vp[3][0] - vp[1][0], vp[3][1] - vp[1][1], vp[3][2] - vp[1][2],
-              vp[3][3] - vp[1][3]},
-        // Near Plane
-        Plane{vp[3][0] + vp[2][0], vp[3][1] + vp[2][1], vp[3][2] + vp[2][2],
-              vp[3][3] + vp[2][3]},
-        // Far Plane
-        Plane{vp[3][0] - vp[2][0], vp[3][1] - vp[2][1], vp[3][2] - vp[2][2],
-              vp[3][3] - vp[2][3]},
-    };
-
-    return planes;
-}
-
-std::vector<glm::vec4>
-SYN::gfx::gl::Renderer::getFrustumCornersWorldSpace(const Camera &camera) {
-    glm::mat4 viewMatrix =
-        glm::lookAtRH(camera.position, camera.target, camera.up);
-
-    glm::mat4 projMatrix =
-        glm::perspectiveRH_NO(glm::radians(camera.fovYDegrees), camera.aspect,
-                              camera.nearPlane, camera.farPlane);
-
-    glm::mat4 viewProjectionInverse = glm::inverse(projMatrix * viewMatrix);
-    std::vector<glm::vec4> frustumCorners;
-    frustumCorners.reserve(8);
-    for (int x = 0; x < 2; ++x) {
-        for (int y = 0; y < 2; ++y) {
-            for (int z = 0; z < 2; ++z) {
-                glm::vec4 p(x * 2 - 1, y * 2 - 1, z * 2 - 1, 1.0f);
-                p = viewProjectionInverse * p;
-                p /= p.w;
-                frustumCorners.push_back(p);
-            }
-        }
-    }
-    return frustumCorners;
-}
-
 glm::mat4 SYN::gfx::gl::Renderer::calculateTightLightFrustum(
     const DirectionalLight &light, uint32_t resolution, const Camera &camera,
     float &texelWorld) {
     ZoneScopedN("Calculate tight light frustum");
 
-    std::vector<glm::vec4> corners = getFrustumCornersWorldSpace(camera);
+    glm::mat4 viewMatrix =
+        glm::lookAtRH(camera.position, camera.target, camera.up);
+
+    glm::mat4 projMatrix =
+        glm::perspectiveRH_NO(glm::radians(camera.fovYDegrees), camera.aspect,
+                              camera.nearPlane, camera.farPlane);
+
+    std::vector<glm::vec4> corners =
+        Frustum::getCornersWorldSpace(viewMatrix, projMatrix);
+
     glm::vec3 center(0.0f);
+
     for (const glm::vec4 &p : corners) {
         center += glm::vec3(p);
     }
@@ -3728,14 +3609,15 @@ SYN::gfx::gl::Renderer::getRenderItemsByShader(Context &context,
 }
 
 void SYN::gfx::gl::Renderer::frustumCullRenderItems(
-    std::vector<RenderItem> &items, const std::vector<Plane> &planes) {
+    std::vector<RenderItem> &items) {
     ZoneScopedN("Frustum Cull");
-    items.erase(std::remove_if(items.begin(), items.end(),
-                               [&](const RenderItem &item) {
-                                   return !item.aabb.transform(item.transform)
-                                               .collidesWithFrustum(planes);
-                               }),
-                items.end());
+    items.erase(
+        std::remove_if(items.begin(), items.end(),
+                       [&](const RenderItem &item) {
+                           AABB worldAABB = item.aabb.transform(item.transform);
+                           return !m_CurrentFrustum.collidesWithAABB(worldAABB);
+                       }),
+        items.end());
 }
 
 void SYN::gfx::gl::Renderer::sortRenderItems(std::vector<RenderItem> &items) {

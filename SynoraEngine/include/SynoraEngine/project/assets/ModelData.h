@@ -5,6 +5,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <SynoraEngine/core/math/AABB.h>
+
 namespace SYN {
 
 struct Vertex {
@@ -26,10 +28,7 @@ struct MeshData {
 
     bool hasSkin = false;
 
-    struct {
-        glm::vec3 min;
-        glm::vec3 max;
-    } aabb;
+    AABB aabb;
 };
 
 struct Skeleton {

@@ -11,12 +11,15 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
+#include <SynoraEngine/core/math/AABB.h>
+#include <SynoraEngine/core/math/Frustum.h>
+#include <SynoraEngine/core/math/Plane.h>
+
 #include <SynoraEngine/project/AssetRef.h>
 #include <SynoraEngine/project/UUID.h>
 
-#include <SynoraEngine/renderer/backends/IRenderViewBackend.h>
-
 #include <SynoraEngine/renderer/DebugDraw.h>
+#include <SynoraEngine/renderer/backends/IRenderViewBackend.h>
 
 #ifdef SHADER_DEBUG_PATH
 #define SHADER_PATH SHADER_DEBUG_PATH
@@ -434,23 +437,6 @@ struct RendererConfig {
     bool bloomEnabled = true;
     float bloomThreshold = 1.0f;
     float renderScale = 1.0f;
-};
-
-struct Plane {
-    float a;
-    float b;
-    float c;
-    float d;
-};
-
-struct AABB {
-    glm::vec3 min;
-    glm::vec3 max;
-
-    glm::vec3 getPVertex(glm::vec3 normal) const;
-    glm::vec3 getNVertex(glm::vec3 normal) const;
-    bool collidesWithFrustum(const std::vector<Plane> &frustum) const;
-    AABB transform(glm::mat4 transform) const;
 };
 
 struct Mesh {
@@ -994,13 +980,10 @@ class Renderer : public IRenderViewBackend {
     void drawDirectionalCSM(Context &context, const DirectionalLight &light);
 
   private:
-    std::vector<glm::vec4> getFrustumCornersWorldSpace(const Camera &camera);
     glm::mat4 calculateTightLightFrustum(const DirectionalLight &light,
                                          uint32_t resolution,
                                          const Camera &camera,
                                          float &texelWorld);
-
-    std::vector<Plane> planesFromCameraFrustum(const Camera &camera);
 
   private:
     struct DrawCommand {
@@ -1011,7 +994,7 @@ class Renderer : public IRenderViewBackend {
     };
     std::vector<DrawCommand> m_DrawCommandList;
     std::vector<glm::mat4> m_FrameBoneMatrices;
-    std::vector<Plane> m_FrustumPlanes;
+    Frustum m_CurrentFrustum;
 
     RenderTechnique m_ShadowPass;
     void createShadowPassTechnique();
@@ -1032,8 +1015,7 @@ class Renderer : public IRenderViewBackend {
     std::vector<RenderItem> getRenderItemsByShader(Context &context,
                                                    uint32_t shaderIndex,
                                                    uint32_t exclusionMask = 0);
-    void frustumCullRenderItems(std::vector<RenderItem> &items,
-                                const std::vector<Plane> &planes);
+    void frustumCullRenderItems(std::vector<RenderItem> &items);
     void sortRenderItems(std::vector<RenderItem> &items);
 
     struct alignas(16) CameraConstants {

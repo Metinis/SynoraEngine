@@ -232,7 +232,8 @@ bool ModelImporter::load(std::filesystem::path filepath, ModelData &asset,
         filepath.string(),
         aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
             aiProcess_GenSmoothNormals | aiProcess_CalcTangentSpace |
-            aiProcess_FlipUVs | aiProcess_LimitBoneWeights);
+            aiProcess_FlipUVs | aiProcess_LimitBoneWeights |
+            aiProcess_GenBoundingBoxes);
 
     if (m_Scene == nullptr || m_Scene->mRootNode == nullptr) {
         spdlog::error("Could not load [{}]: {}", filepath.string(),
@@ -463,18 +464,10 @@ MeshData ModelImporter::processMesh(const aiMesh *mesh,
     MeshData result{};
     result.localTransform = localTransform;
 
-    // Local-space AABB accumulated over the raw vertex positions.
-
-    glm::vec3 aabbMin(std::numeric_limits<float>::max());
-    glm::vec3 aabbMax(std::numeric_limits<float>::lowest());
-
     for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
         Vertex vertex{};
         vertex.position = {mesh->mVertices[i].x, mesh->mVertices[i].y,
                            mesh->mVertices[i].z};
-
-        aabbMin = glm::min(aabbMin, vertex.position);
-        aabbMax = glm::max(aabbMax, vertex.position);
 
         if (mesh->HasNormals()) {
             vertex.normal = {mesh->mNormals[i].x, mesh->mNormals[i].y,
@@ -501,7 +494,12 @@ MeshData ModelImporter::processMesh(const aiMesh *mesh,
         result.vertices.emplace_back(vertex);
     }
 
-    result.aabb = {aabbMin, aabbMax};
+    aiAABB aabb = mesh->mAABB;
+
+    glm::vec3 min = glm::vec3(aabb.mMin.x, aabb.mMin.y, aabb.mMin.z);
+    glm::vec3 max = glm::vec3(aabb.mMax.x, aabb.mMax.y, aabb.mMax.z);
+
+    result.aabb = {min, max};
 
     for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
         const aiFace &face = mesh->mFaces[i];
