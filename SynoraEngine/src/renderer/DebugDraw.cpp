@@ -46,5 +46,15 @@ void DebugDraw::aabb(glm::vec3 min, glm::vec3 max, glm::vec3 color,
     line(e, g, color, thickness, depthTest);
     line(f, h, color, thickness, depthTest);
     line(g, h, color, thickness, depthTest);
+
+    line(a, e, color, thickness, depthTest);
+    line(b, f, color, thickness, depthTest);
+    line(c, g, color, thickness, depthTest);
+    line(d, h, color, thickness, depthTest);
+}
+
+void DebugDraw::clear() {
+    m_LinesDepth.clear();
+    m_LinesNoDepth.clear();
 }
 } // namespace SYN
