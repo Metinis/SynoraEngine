@@ -134,8 +134,6 @@ SYN::gfx::gl::Renderer::createMesh(SYN::gfx::gl::Context &context,
         m_AssetManager->get<MaterialData>(meshData.material.uuid());
     mesh.material = loadMaterial(context, *material);
 
-    mesh.aabb = {meshData.aabb.min, meshData.aabb.max};
-
     return mesh;
 }
 
@@ -1911,6 +1909,8 @@ void SYN::gfx::gl::Renderer::submitFrame(const RenderView3D &sceneDescription) {
     for (uint32_t i = 0; i < modelCount; ++i) {
         UUID model = sceneDescription.models.at(i);
         glm::mat4 transform = sceneDescription.transforms.at(i);
+        const std::vector<AABB> &meshBounds =
+            sceneDescription.bounds.at(i).meshBounds;
 
         std::vector<MaterialOverride> materialOverride;
         if (auto it = materialMap.find(i); it != materialMap.cend()) {
@@ -1924,7 +1924,8 @@ void SYN::gfx::gl::Renderer::submitFrame(const RenderView3D &sceneDescription) {
             boneMatrices = it->second;
         }
 
-        submit(*m_Context, model, transform, materialOverride, boneMatrices);
+        submit(*m_Context, model, transform, meshBounds, materialOverride,
+               boneMatrices);
     }
 }
 
@@ -1963,18 +1964,9 @@ void SYN::gfx::gl::Renderer::createModel(Context &context, UUID model) {
         if (!mesh.material.albedo) {
             mesh.material.albedo = m_DefaultWhite;
         }
-        if (mesh.hasSkin) {
-            mesh.aabb = mesh.aabb.transform(modelData->skeleton.inverseRoot);
 
-            // Inflate the skinned mesh's aabb by generous margin to
-            // account for animations.
-            //
-            // TODO: Compute bound from all clips during load time
-            glm::vec3 padding = (mesh.aabb.max - mesh.aabb.min) * 0.25f;
-            mesh.aabb.min -= padding;
-            mesh.aabb.max += padding;
-        }
         mesh.sourceIndex = sourceIndex;
+
         if (mesh.material.alphaCutoff < 1.0f) {
             loadedModel.meshesMasked.push_back(mesh);
         } else {
@@ -2780,10 +2772,12 @@ void SYN::gfx::gl::Renderer::setDirectionalLight(
 
 void SYN::gfx::gl::Renderer::submit(
     Context &context, UUID model, const glm::mat4 &transform,
+    std::span<const AABB> meshBounds,
     std::span<const MaterialOverride> materialOverride,
     std::span<const glm::mat4> boneMatrices) {
 
     std::optional<uint32_t> boneIndex = std::nullopt;
+
     if (!boneMatrices.empty()) {
         boneIndex = m_FrameBoneMatrices.size();
         m_FrameBoneMatrices.resize(m_FrameBoneMatrices.size() + MAX_BONES,
@@ -2803,7 +2797,7 @@ void SYN::gfx::gl::Renderer::submit(
         std::get<Handle<Model>>(it->second.handle), transform,
         std::vector<MaterialOverride>(materialOverride.begin(),
                                       materialOverride.end()),
-        boneIndex);
+        boneIndex, std::vector<AABB>(meshBounds.cbegin(), meshBounds.cend()));
 }
 
 std::tuple<uint32_t, uint32_t> SYN::gfx::gl::Renderer::getRenderResolution() {
@@ -3576,6 +3570,7 @@ SYN::gfx::gl::Renderer::getRenderItemsByShader(Context &context,
                                     .value_or(mesh.material);
 
             uint32_t shaderFeatures = getShaderFeatures(mesh, material);
+
             if (!cmd.boneOffset.has_value()) {
                 shaderFeatures &= ~(uint32_t)(ShaderFeature::Skinned);
             }
@@ -3590,7 +3585,8 @@ SYN::gfx::gl::Renderer::getRenderItemsByShader(Context &context,
             glm::mat4 worldTransform = cmd.transform * mesh.localTransform;
 
             renderItems.push_back({worldTransform, material, mesh.vao,
-                                   mesh.indexCount, shaderFeatures, mesh.aabb,
+                                   mesh.indexCount, shaderFeatures,
+                                   cmd.meshBounds.at(mesh.sourceIndex),
                                    cmd.boneOffset});
         }
     };
@@ -3611,13 +3607,12 @@ SYN::gfx::gl::Renderer::getRenderItemsByShader(Context &context,
 void SYN::gfx::gl::Renderer::frustumCullRenderItems(
     std::vector<RenderItem> &items) {
     ZoneScopedN("Frustum Cull");
-    items.erase(
-        std::remove_if(items.begin(), items.end(),
-                       [&](const RenderItem &item) {
-                           AABB worldAABB = item.aabb.transform(item.transform);
-                           return !m_CurrentFrustum.collidesWithAABB(worldAABB);
-                       }),
-        items.end());
+    items.erase(std::remove_if(items.begin(), items.end(),
+                               [&](const RenderItem &item) {
+                                   return !m_CurrentFrustum.collidesWithAABB(
+                                       item.aabb);
+                               }),
+                items.end());
 }
 
 void SYN::gfx::gl::Renderer::sortRenderItems(std::vector<RenderItem> &items) {

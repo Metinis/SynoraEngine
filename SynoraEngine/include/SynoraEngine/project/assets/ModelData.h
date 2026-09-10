@@ -29,6 +29,9 @@ struct MeshData {
     bool hasSkin = false;
 
     AABB aabb;
+
+    // Bone index and bone AABB
+    std::vector<std::pair<uint32_t, AABB>> boneAABBs;
 };
 
 struct Skeleton {

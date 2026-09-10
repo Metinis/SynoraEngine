@@ -37,10 +37,11 @@ void RenderViewBuilder::onRender() {
                                         camera.farPlane, camera.isPrimary);
     });
 
-    scene->forEach<ModelComponent, TransformComponent>(
-        [&](Entity entity, ModelComponent &model,
+    scene->forEach<ModelComponent, BoundsComponent, TransformComponent>(
+        [&](Entity entity, ModelComponent &model, BoundsComponent &bounds,
             TransformComponent &transform) {
             renderView.models.push_back(model.model.uuid());
+            renderView.bounds.emplace_back(bounds.meshBounds);
 
             uint32_t modelIndex = renderView.models.size() - 1;
 

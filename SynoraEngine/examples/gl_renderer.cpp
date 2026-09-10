@@ -297,14 +297,25 @@ class GraphicsScene : public SYN::ILayer {
 
     void onRender() override {
         if (m_DrawDebugLines) {
-            m_DebugDraw->line(glm::vec3(0.0f), glm::vec3(10.0f),
-                              glm::vec3(1.0, 0.0, 0.0));
-            m_DebugDraw->line(glm::vec3(10.0f), glm::vec3(0.0, 0.0, 20.0f),
-                              glm::vec3(0.0, 1.0, 0.0), 5.0f);
-            m_DebugDraw->aabb(glm::vec3(0.0f), glm::vec3(-10.0f),
-                              glm::vec3(1.0f, 1.0f, 0.0f), 1.0f, false);
             m_DebugDraw->cameraFrustum(m_CameraView, m_CameraProj,
                                        glm::vec3(0.0f, 1.0f, 1.0f));
+            SYN::SceneHandle currentScene = m_SceneManager->getActiveScene();
+            if (m_SceneManager->isSceneValid(currentScene)) {
+                SYN::Scene *current = m_SceneManager->getSceneMut(currentScene);
+
+                SYN::Frustum frustum = SYN::Frustum::fromViewProjectionMatrix(
+                    m_CameraView, m_CameraProj);
+                current->forEach<SYN::BoundsComponent>(
+                    [this, &frustum](SYN::Entity entity,
+                                     SYN::BoundsComponent &bounds) {
+                        for (SYN::AABB aabb : bounds.meshBounds) {
+                            glm::vec3 color = glm::vec3(1.0f, 0.0f, 0.0f);
+                            if (frustum.collidesWithAABB(aabb))
+                                color = glm::vec3(1.0f, 1.0f, 0.0f);
+                            m_DebugDraw->aabb(aabb.min, aabb.max, color);
+                        }
+                    });
+            }
         }
     }
 

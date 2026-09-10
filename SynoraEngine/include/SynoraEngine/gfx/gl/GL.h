@@ -452,7 +452,6 @@ struct Mesh {
 
     bool hasSkin = false;
 
-    AABB aabb;
     uint32_t sourceIndex;
 };
 
@@ -828,6 +827,7 @@ class Renderer : public IRenderViewBackend {
     void beginFrame(const Camera &camera);
     void setDirectionalLight(const DirectionalLight &light);
     void submit(Context &context, UUID model, const glm::mat4 &transform,
+                std::span<const AABB> meshBounds,
                 std::span<const MaterialOverride> materialOverride = {},
                 std::span<const glm::mat4> boneMatrices = {});
     void endFrame(Context &context);
@@ -991,6 +991,7 @@ class Renderer : public IRenderViewBackend {
         glm::mat4 transform;
         std::vector<MaterialOverride> materialOverride;
         std::optional<uint32_t> boneOffset;
+        std::vector<AABB> meshBounds;
     };
     std::vector<DrawCommand> m_DrawCommandList;
     std::vector<glm::mat4> m_FrameBoneMatrices;

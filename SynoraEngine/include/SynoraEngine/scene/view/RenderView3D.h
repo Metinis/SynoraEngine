@@ -4,6 +4,8 @@
 
 #include <SynoraEngine/project/UUID.h>
 
+#include <SynoraEngine/core/math/AABB.h>
+
 namespace SYN {
 struct CameraView {
     glm::mat4 worldTransform;
@@ -25,8 +27,13 @@ struct AnimationView {
     std::span<const glm::mat4> boneMatrices;
 };
 
+struct BoundsView {
+    std::vector<AABB> meshBounds;
+};
+
 struct RenderView3D {
     std::vector<UUID> models;
+    std::vector<BoundsView> bounds;
     std::vector<glm::mat4> transforms;
     std::vector<CameraView> cameras;
     std::vector<MaterialView> materials;

@@ -21,6 +21,21 @@ glm::vec3 AABB::getNVertex(glm::vec3 normal) const {
     return glm::vec3(x, y, z);
 }
 
+AABB AABB::empty() {
+    float minVal = std::numeric_limits<float>().lowest();
+    float maxVal = std::numeric_limits<float>().max();
+    return {glm::vec3(maxVal), glm::vec3(minVal)};
+}
+
+AABB AABB::unionWith(AABB other) const {
+    AABB unioned = *this;
+
+    unioned.min = glm::min(unioned.min, other.min);
+    unioned.max = glm::max(unioned.max, other.max);
+
+    return unioned;
+}
+
 AABB AABB::transform(glm::mat4 transform) const {
     AABB aabb = *this;
 

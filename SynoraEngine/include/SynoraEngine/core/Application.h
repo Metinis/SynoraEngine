@@ -12,6 +12,7 @@ class SceneManager;
 
 class CameraSystem;
 class AnimationPlayerSystem;
+class ComputeBoundsSystem;
 class RenderViewBuilder;
 class DebugDraw;
 
@@ -31,6 +32,7 @@ struct EngineContext {
     std::unique_ptr<SceneManager> sceneManager;
 
     std::unique_ptr<RenderViewBuilder> renderViewBuilder;
+    std::unique_ptr<ComputeBoundsSystem> computeBoundsSystem;
     std::unique_ptr<AnimationPlayerSystem> animationPlayerSystem;
     std::unique_ptr<CameraSystem> cameraSystem;
 
