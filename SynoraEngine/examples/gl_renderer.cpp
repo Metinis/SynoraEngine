@@ -40,6 +40,8 @@ class GraphicsScene : public SYN::ILayer {
         SYN::AssetManager *assetManager =
             engineContext->projectConfig.assetManager.get();
 
+        m_AssetManager = assetManager;
+
         m_Renderer = static_cast<gl::Renderer *>(engineContext->renderer.get());
 
         m_DebugDraw = engineContext->debugDraw.get();
@@ -68,18 +70,32 @@ class GraphicsScene : public SYN::ILayer {
             assetManager->load<SYN::ModelData>("resources/assets/dancer.glb")
                 .value();
 
-        m_DancerClips = {assetManager
-                             ->loadWithKey<SYN::AnimationClipData>(
-                                 "resources/assets/dancer.glb", "dancerAnim")
-                             .value()};
+        std::vector<SYN::UUID> dancerClips = {
+            assetManager
+                ->loadWithKey<SYN::AnimationClipData>(
+                    "resources/assets/dancer.glb", "dancerAnim")
+                .value()};
+
+        for (SYN::UUID id : dancerClips) {
+            m_DancerClips.push_back(m_AssetManager->acquire(id));
+        }
+
+        assert(m_DancerClips.size() > 0 && "Unable to load dancer animations!");
 
         m_Parasite =
             assetManager->load<SYN::ModelData>("resources/assets/parasite.glb")
                 .value();
-        m_ParasiteClips = assetManager
-                              ->loadGroup<SYN::AnimationClipData>(
-                                  "resources/assets/parasite.glb")
-                              .value();
+
+        std::vector<SYN::UUID> parasiteClips =
+            assetManager
+                ->loadGroup<SYN::AnimationClipData>(
+                    "resources/assets/parasite.glb")
+                .value();
+
+        for (SYN::UUID id : parasiteClips) {
+            m_ParasiteClips.push_back(m_AssetManager->acquire(id));
+        }
+
         assert(m_ParasiteClips.size() > 0 &&
                "Unable to load parasite animations!");
         m_Weight = 0.0f;
@@ -153,8 +169,6 @@ class GraphicsScene : public SYN::ILayer {
         }
 
         m_Renderer->setEnvironment(m_EnvironmentNames.at(0));
-
-        m_AssetManager = assetManager;
 
         for (int row = 0; row < 7; ++row) {
             float metal = (float)row / 6.0f;
@@ -552,11 +566,11 @@ class GraphicsScene : public SYN::ILayer {
     SYN::UUID m_Waltuh;
 
     SYN::UUID m_Dancer;
-    std::vector<SYN::UUID> m_DancerClips;
+    std::vector<SYN::AssetRef> m_DancerClips;
     SYN::AnimationPlayer *m_DancerPlayer;
 
     SYN::UUID m_Parasite;
-    std::vector<SYN::UUID> m_ParasiteClips;
+    std::vector<SYN::AssetRef> m_ParasiteClips;
     SYN::AnimationPlayer *m_ParasitePlayer;
     float m_Weight = 0.0f;
     float m_CrossfadeDuration = 0.0f;

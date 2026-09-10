@@ -11,8 +11,8 @@ class AnimationPlayer {
     AnimationPlayer() = default;
     AnimationPlayer(class AssetManager *assetManager);
 
-    void setClip(UUID clip);
-    void setTargetClip(UUID target);
+    void setClip(AssetRef clip);
+    void setTargetClip(AssetRef target);
     void setBlendWeight(float blendWeight);
     void setLoop(bool loop);
 
@@ -21,11 +21,12 @@ class AnimationPlayer {
     void play(std::optional<float> time = std::nullopt);
 
     // Blends between current clip to target clip in time specified by duration
-    void crossfadeTo(UUID target, float duration);
+    void crossfadeTo(AssetRef target, float duration);
 
     // Blends between current clip to 'to' clip (with blendIn time) and from
     // 'to' to 'returnTo' (with blendOut time).
-    void playOneShot(UUID to, UUID returnTo, float blendIn, float blendOut);
+    void playOneShot(AssetRef to, AssetRef returnTo, float blendIn,
+                     float blendOut);
 
     // Pause playback
     void stop();

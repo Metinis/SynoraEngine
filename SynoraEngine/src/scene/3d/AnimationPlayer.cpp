@@ -26,22 +26,22 @@ AnimationPlayer::AnimationPlayer(AssetManager *assetManager) {
     m_AssetManager = assetManager;
 }
 
-void AnimationPlayer::setClip(UUID clip) {
+void AnimationPlayer::setClip(AssetRef clip) {
     if (isAssetManagerNULL(m_AssetManager,
                            "Cannot set clip because asset manager is NULL."))
         return;
 
-    m_Clip = m_AssetManager->acquire(clip);
+    m_Clip = clip;
     m_DefaultPose = true;
 }
 
-void AnimationPlayer::setTargetClip(UUID target) {
+void AnimationPlayer::setTargetClip(AssetRef target) {
     if (isAssetManagerNULL(
             m_AssetManager,
             "Cannot set target clip because asset manager is NULL."))
         return;
 
-    m_TargetClip = m_AssetManager->acquire(target);
+    m_TargetClip = target;
     m_TargetTime = 0.0f;
 }
 
@@ -77,7 +77,7 @@ void AnimationPlayer::play(std::optional<float> time) {
 }
 void AnimationPlayer::stop() { m_IsPlaying = false; }
 
-void AnimationPlayer::crossfadeTo(UUID target, float duration) {
+void AnimationPlayer::crossfadeTo(AssetRef target, float duration) {
     if (isAssetManagerNULL(
             m_AssetManager,
             "Cannot crossfade to target clip because asset manager is NULL."))
@@ -89,7 +89,7 @@ void AnimationPlayer::crossfadeTo(UUID target, float duration) {
     }
 
     const AnimationClipData *targetClip =
-        m_AssetManager->get<AnimationClipData>(target);
+        m_AssetManager->get<AnimationClipData>(target.uuid());
 
     if (targetClip == nullptr) {
         spdlog::error("Cannot crossfade to NULL clip");
@@ -104,7 +104,7 @@ void AnimationPlayer::crossfadeTo(UUID target, float duration) {
     m_BlendWeight = 0.0f;
 }
 
-void AnimationPlayer::playOneShot(UUID to, UUID returnTo, float blendIn,
+void AnimationPlayer::playOneShot(AssetRef to, AssetRef returnTo, float blendIn,
                                   float blendOut) {
     if (isAssetManagerNULL(
             m_AssetManager,
@@ -112,14 +112,14 @@ void AnimationPlayer::playOneShot(UUID to, UUID returnTo, float blendIn,
         return;
 
     const AnimationClipData *returnToClip =
-        m_AssetManager->get<AnimationClipData>(returnTo);
+        m_AssetManager->get<AnimationClipData>(returnTo.uuid());
     if (returnToClip == nullptr) {
         spdlog::error("Cannot return to NULL clip");
         return;
     }
 
     m_IsPlayingOneshot = true;
-    m_ReturnTo = m_AssetManager->acquire(returnTo);
+    m_ReturnTo = returnTo;
     m_BlendOut = blendOut;
 
     crossfadeTo(to, blendIn);
@@ -193,7 +193,7 @@ void AnimationPlayer::update(UUID model, float dt) {
 
     if (m_IsPlayingOneshot && !m_IsCrossfading) {
         if (m_CurrentTime >= mainClip->duration - m_BlendOut) {
-            crossfadeTo(m_ReturnTo.uuid(), m_BlendOut);
+            crossfadeTo(m_ReturnTo, m_BlendOut);
             m_BlendOut = 0.0f;
             m_IsPlayingOneshot = false;
         }
