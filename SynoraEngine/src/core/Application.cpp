@@ -20,6 +20,7 @@
 
 #include "scene/systems/AnimationPlayerSystem.h"
 #include "scene/systems/CameraSystem.h"
+#include "scene/systems/ComputeBoundsSystem.h"
 #include "scene/systems/RenderViewBuilder.h"
 
 #include <tracy/Tracy.hpp>
@@ -36,6 +37,8 @@ Application::Application() {
     m_EngineContext.cameraSystem = std::make_unique<CameraSystem>();
     m_EngineContext.animationPlayerSystem =
         std::make_unique<AnimationPlayerSystem>();
+    m_EngineContext.computeBoundsSystem =
+        std::make_unique<ComputeBoundsSystem>();
     m_EngineContext.debugDraw = std::make_unique<DebugDraw>();
     m_EngineContext.renderViewBuilder = std::make_unique<RenderViewBuilder>();
 
@@ -74,10 +77,12 @@ void Application::init() {
     m_EngineContext.renderViewBuilder->init(&m_EngineContext);
     m_EngineContext.cameraSystem->init(&m_EngineContext);
     m_EngineContext.animationPlayerSystem->init(&m_EngineContext);
+    m_EngineContext.computeBoundsSystem->init(&m_EngineContext);
 
     m_Layers.push_back(m_EngineContext.sceneManager.get());
     m_Layers.push_back(m_EngineContext.cameraSystem.get());
     m_Layers.push_back(m_EngineContext.animationPlayerSystem.get());
+    m_Layers.push_back(m_EngineContext.computeBoundsSystem.get());
     m_Layers.push_back(m_EngineContext.renderViewBuilder.get());
 }
 
