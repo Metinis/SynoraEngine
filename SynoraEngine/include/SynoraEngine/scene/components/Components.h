@@ -1,4 +1,5 @@
 #pragma once
+#include "BoundsComponent.h"
 #include "CameraComponent.h"
 #include "MaterialComponent.h"
 #include "ModelComponent.h"
