@@ -2496,7 +2496,8 @@ void SYN::gfx::gl::Renderer::createEnvironment(Context &context,
         return;
     }
 
-    if (environment.cubemap.size() != 1 && environment.cubemap.size() != 6) {
+    if (environment.type != Environment::Type::ClearColor &&
+        environment.cubemap.size() != 1 && environment.cubemap.size() != 6) {
         spdlog::error("You must add either one image, or 6 images to the "
                       "environment cubemap. One image is for HDR maps, 6 "
                       "images is for a normal skybox.");
@@ -2710,6 +2711,8 @@ void SYN::gfx::gl::Renderer::createEnvironment(Context &context,
     resource.bloomEnabled = environment.bloomEnabled;
 
     if (resource.type == Environment::Type::ClearColor) {
+        resource.irradianceMap = m_DefaultIrradianceMap;
+        resource.prefilterMap = m_DefaultPrefilterMap;
         m_NameToEnvironment[key] = resource;
         return;
     }
