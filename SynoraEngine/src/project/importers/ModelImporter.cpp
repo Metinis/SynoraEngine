@@ -186,6 +186,27 @@ AssetRef loadExternalTexture(const std::filesystem::path &texturePath,
     return manager->acquire(uuid.value());
 }
 
+std::optional<AABB> computeBoneAABB(const aiBone *bone,
+                                    const MeshData &meshData) {
+    AABB localBoneAABB = AABB::empty();
+    for (unsigned int weightIdx = 0; weightIdx < bone->mNumWeights;
+         ++weightIdx) {
+        const aiVertexWeight &weight = bone->mWeights[weightIdx];
+        if (weight.mVertexId >= meshData.vertices.size()) {
+            continue;
+        }
+        localBoneAABB.min = glm::min(
+            localBoneAABB.min, meshData.vertices[weight.mVertexId].position);
+        localBoneAABB.max = glm::max(
+            localBoneAABB.max, meshData.vertices[weight.mVertexId].position);
+    }
+
+    if (glm::any(glm::lessThan(localBoneAABB.max, localBoneAABB.min)))
+        return std::nullopt;
+
+    return localBoneAABB;
+}
+
 void addBoneData(Vertex &vertex, int boneIndex, float weight) {
     for (int i = 0; i < 4; ++i) {
         if (vertex.boneWeights[i] == 0.0f) {
@@ -431,14 +452,22 @@ void ModelImporter::applyBonesToMesh(MeshData &meshData,
         const aiBone *bone = mesh->mBones[boneIdx];
         const std::string boneName = bone->mName.C_Str();
         uint32_t mappedBoneIndex{};
+
         auto [it, inserted] = m_BoneIndexMap.emplace(boneName, m_NextBoneIndex);
+
         if (inserted) {
             mappedBoneIndex = m_NextBoneIndex;
+
             skeleton.boneInfo.emplace_back(m_NodeNameToIndex.at(boneName),
                                            toGlmMatrix(bone->mOffsetMatrix));
+
             ++m_NextBoneIndex;
         } else {
             mappedBoneIndex = it->second;
+        }
+
+        if (auto aabb = computeBoneAABB(bone, meshData); aabb.has_value()) {
+            meshData.boneAABBs.emplace_back(mappedBoneIndex, aabb.value());
         }
 
         for (unsigned int weightIdx = 0; weightIdx < bone->mNumWeights;
