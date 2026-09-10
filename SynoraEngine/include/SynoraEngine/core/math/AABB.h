@@ -10,6 +10,8 @@ struct AABB {
     glm::vec3 getPVertex(glm::vec3 normal) const;
     glm::vec3 getNVertex(glm::vec3 normal) const;
 
+    static AABB empty();
+    AABB unionWith(AABB other) const;
     AABB transform(glm::mat4 transform) const;
 };
 } // namespace SYN
