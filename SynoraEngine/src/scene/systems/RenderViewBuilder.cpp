@@ -54,6 +54,7 @@ void RenderViewBuilder::onRender() {
                  CameraComponent::RenderMode::Continuous)) {
                 renderTargetList.emplace_back(camera, cameraTransform,
                                               renderTarget.renderTarget.uuid());
+                camera.dirty = false;
             }
         });
 
