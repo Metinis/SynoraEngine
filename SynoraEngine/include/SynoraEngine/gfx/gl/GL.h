@@ -60,9 +60,11 @@ enum class TextureFormat : uint8_t {
     RGB8,
     RG8,
     R8,
+    R32UI,
     Depth16,
     Depth24,
     Depth24Stencil8,
+    Depth32,
     SRGB,
     SRGBA,
     RG16F,
@@ -461,6 +463,12 @@ struct Model {
     const struct Skeleton *skeleton;
 };
 
+struct RenderTarget {
+    Handle<Framebuffer> framebuffer;
+    std::vector<AttachmentDesc> colorAttachments;
+    std::optional<AttachmentDesc> depthAttachment = std::nullopt;
+};
+
 struct Environment {
     enum class Type { Cubemap, HdrMap, ClearColor };
     Type type = Type::ClearColor;
@@ -810,11 +818,20 @@ class Renderer : public IRenderViewBackend {
     explicit Renderer(const RendererConfig &config);
     ~Renderer();
 
+    std::optional<ImTextureID>
+    getHandleForImGui(UUID renderTarget,
+                      std::optional<uint32_t> index) override;
+
+    void beforeDraw() override;
+    void afterDraw() override;
+
     void init(class EngineContext *context) override;
-    void submitFrame(const RenderView3D &sceneDescription) override;
+    void beginFrame(const RenderView3D &renderView) override;
+    void draw(CameraComponent camera, glm::mat4 cameraTransform,
+              std::optional<UUID> renderTarget) override;
+    void endFrame() override;
     void submitLineList(const std::vector<DebugDraw::Line> &lines,
                         bool depthTest) override;
-    void drawScene() override;
 
     void createEnvironment(Context &context, std::string_view name,
                            const Environment &enviroment);
@@ -824,13 +841,7 @@ class Renderer : public IRenderViewBackend {
     void setEnvironment(std::optional<std::string_view> name);
     void destroyEnvironment(Context &context, std::string_view name);
 
-    void beginFrame(const Camera &camera);
     void setDirectionalLight(const DirectionalLight &light);
-    void submit(Context &context, UUID model, const glm::mat4 &transform,
-                std::span<const AABB> meshBounds,
-                std::span<const MaterialOverride> materialOverride = {},
-                std::span<const glm::mat4> boneMatrices = {});
-    void endFrame(Context &context);
 
     // Clamped between MIN_GAMMA and MAX_GAMMA
     void setGamma(float gamma);
@@ -853,25 +864,55 @@ class Renderer : public IRenderViewBackend {
     // Resets the shader cache. Use for hot reloading.
     void reloadInternalShaders(Context &context);
 
+    void createModel(Context &context, UUID model);
+    void destroyModel(Context &context, UUID model);
+
+    void createRenderTarget(Context &context, UUID renderTarget);
+    void updateRenderTarget(Context &context, UUID renderTarget);
+    void destroyRenderTarget(Context &context, UUID renderTarget);
+
+  private:
+    void
+    createDrawCommand(Context &context, UUID model, const glm::mat4 &transform,
+                      std::span<const AABB> meshBounds,
+                      std::span<const MaterialOverride> materialOverride = {},
+                      std::span<const glm::mat4> boneMatrices = {});
+
+  private:
+    std::optional<RenderTarget>
+    createRenderTargetResource(Context &context,
+                               const class RenderTargetData *renderTargetData);
+
+    void destroyModelResource(Context &context, Handle<Model> modelHandle);
+    void destroyTextureResource(Context &context,
+                                Handle<Texture> textureHandle);
+    void destroyRenderTargetResource(Context &context,
+                                     RenderTarget renderTarget);
+
   private:
     class AssetManager *m_AssetManager = nullptr;
     Context *m_Context = nullptr;
     class Window *m_Window = nullptr;
 
     struct ResourceHandle {
-        std::variant<Handle<Model>, Handle<Texture>> handle;
+        std::variant<Handle<Model>, Handle<Texture>, RenderTarget> handle;
     };
 
+    struct DeferredResourceSwap {
+        ResourceHandle newHandle;
+        ResourceHandle oldHandle;
+    };
+
+    std::unordered_map<UUID, DeferredResourceSwap> m_DeferredResourceSwap;
     std::unordered_map<UUID, ResourceHandle> m_UUIDToHandle;
+
     std::unordered_map<std::string, EnvironmentResource> m_NameToEnvironment;
     std::string m_CurrentEnvironment = DEFAULT_ENVIRONMENT_NAME;
 
   private:
-    void createModel(Context &context, UUID model);
     Mesh createMesh(Context &context, const struct MeshData &meshData);
     Material loadMaterial(Context &context,
                           const struct MaterialData &materialData);
-    void destroyModel(Context &context, UUID model);
 
   private:
     struct {
