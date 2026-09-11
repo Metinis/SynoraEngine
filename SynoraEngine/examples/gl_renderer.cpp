@@ -13,6 +13,7 @@
 #include <SynoraEngine/project/assets/AnimationClipData.h>
 #include <SynoraEngine/project/assets/MaterialData.h>
 #include <SynoraEngine/project/assets/ModelData.h>
+#include <SynoraEngine/project/assets/RenderTargetData.h>
 #include <SynoraEngine/project/assets/TextureData.h>
 #include <SynoraEngine/scene/3d/AnimationPlayer.h>
 #include <SynoraEngine/scene/SceneManager.h>
@@ -185,6 +186,16 @@ class GraphicsScene : public SYN::ILayer {
             }
         }
 
+        SYN::RenderTargetData renderTarget;
+        renderTarget.width = 400;
+        renderTarget.height = 400;
+        renderTarget.color[0] = SYN::RenderTargetData::Format::RGBA8;
+        renderTarget.colorCount = 1;
+
+        m_ExampleRenderTarget =
+            m_AssetManager->acquire(m_AssetManager->add<SYN::RenderTargetData>(
+                renderTarget, "CustomRenderTarget"));
+
         createSphereScene();
         createCabinScene();
 
@@ -204,8 +215,10 @@ class GraphicsScene : public SYN::ILayer {
             SYN::Scene *scene = m_SceneManager->getSceneMut(sceneHandle);
             scene->forEach<SYN::CameraComponent>(
                 [&](SYN::Entity e, SYN::CameraComponent &camera) {
-                    auto [w, h] = m_Window->getScreenSize();
-                    camera.aspectRatio = (float)w / h;
+                    if (!e.hasComponent<SYN::RenderTargetComponent>()) {
+                        auto [w, h] = m_Window->getScreenSize();
+                        camera.aspectRatio = (float)w / h;
+                    }
                 });
         };
 
@@ -213,15 +226,42 @@ class GraphicsScene : public SYN::ILayer {
         updateSceneCamera(m_CabinScene);
     }
 
+    void mirrorCamera() {
+        auto &camera = m_CustomCamera.getComponent<SYN::CameraComponent>();
+        camera.dirty = true;
+
+        auto &camTransform =
+            m_CustomCamera.getComponent<SYN::TransformComponent>();
+
+        SYN::Scene *cabinScene = m_SceneManager->getSceneMut(m_CabinScene);
+        cabinScene->forEach<SYN::FlyCameraComponent, SYN::TransformComponent>(
+            [&](SYN::Entity entity, SYN::FlyCameraComponent &cam,
+                SYN::TransformComponent &transform) {
+                camTransform = transform;
+            });
+    }
+
     void createCabinScene() {
         SYN::Scene *cabinScene = m_SceneManager->getSceneMut(m_CabinScene);
 
-        SYN::Entity cameraEntity = cabinScene->createEntity("Camera");
+        {
+            SYN::Entity cameraEntity = cabinScene->createEntity("Camera");
 
-        auto &camera = cameraEntity.addComponent<SYN::CameraComponent>();
-        camera.isPrimary = true;
+            auto &camera = cameraEntity.addComponent<SYN::CameraComponent>();
+            camera.isPrimary = true;
 
-        cameraEntity.addComponent<SYN::FlyCameraComponent>();
+            cameraEntity.addComponent<SYN::FlyCameraComponent>();
+        }
+
+        {
+            m_CustomCamera = cabinScene->createEntity("CustomCamera");
+            auto &camera = m_CustomCamera.addComponent<SYN::CameraComponent>();
+            camera.renderMode = SYN::CameraComponent::RenderMode::OnDemand;
+            camera.dirty = true;
+            camera.aspectRatio = 1.0f;
+            m_CustomCamera.addComponent<SYN::RenderTargetComponent>(
+                m_ExampleRenderTarget);
+        }
 
         SYN::Entity cabinEntity = cabinScene->createEntity("Cabin");
         cabinEntity.addComponent<SYN::ModelComponent>(
@@ -334,8 +374,30 @@ class GraphicsScene : public SYN::ILayer {
     }
 
     void onUIRender() override {
+        if (ImGui::Begin("Render Target Demo") &&
+            m_SceneManager->getActiveScene() == m_CabinScene) {
+            if (ImGui::Button("Update render target")) {
+                mirrorCamera();
+            }
+            const char *renderMode[] = {"OnDemand", "Continuous"};
+            if (ImGui::Combo("Render mode", (int32_t *)&m_RenderMode,
+                             renderMode, 2)) {
+                auto &cam = m_CustomCamera.getComponent<SYN::CameraComponent>();
+                if (m_RenderMode == 0)
+                    cam.renderMode = SYN::CameraComponent::RenderMode::OnDemand;
+                if (m_RenderMode == 1)
+                    cam.renderMode =
+                        SYN::CameraComponent::RenderMode::Continuous;
+                cam.dirty = true;
+            }
+            std::optional<ImTextureID> id =
+                m_Renderer->getHandleForImGui(m_ExampleRenderTarget.uuid(), 0);
+            if (id.has_value())
+                ImGui::Image(id.value(), ImVec2(400, 400), ImVec2(0, 1),
+                             ImVec2(1, 0));
+        }
+        ImGui::End();
         if (ImGui::Begin("Renderer Config")) {
-
             if (ImGui::Button("Update debug frustum")) {
                 SYN::Scene *scene = m_SceneManager->getSceneMut(
                     m_SceneManager->getActiveScene());
@@ -569,6 +631,10 @@ class GraphicsScene : public SYN::ILayer {
     std::vector<SYN::AssetRef> m_DancerClips;
     SYN::AnimationPlayer *m_DancerPlayer;
 
+    SYN::Entity m_CustomCamera;
+    SYN::AssetRef m_ExampleRenderTarget;
+    uint32_t m_RenderMode = 0;
+
     SYN::UUID m_Parasite;
     std::vector<SYN::AssetRef> m_ParasiteClips;
     SYN::AnimationPlayer *m_ParasitePlayer;
@@ -601,7 +667,6 @@ class GraphicsScene : public SYN::ILayer {
 
     glm::vec3 m_Color;
 
-    std::string m_RenderMode = "Sphere";
     int m_RenderModeIdx = 1;
 
     gl::AntiAliasMode m_AntiAliasMode = gl::AntiAliasMode::MSAA_4x;
