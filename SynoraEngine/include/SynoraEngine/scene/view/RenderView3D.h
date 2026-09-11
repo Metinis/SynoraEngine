@@ -2,19 +2,10 @@
 
 #include <glm/glm.hpp>
 
+#include <SynoraEngine/core/math/AABB.h>
 #include <SynoraEngine/project/UUID.h>
 
-#include <SynoraEngine/core/math/AABB.h>
-
 namespace SYN {
-struct CameraView {
-    glm::mat4 worldTransform;
-    float fov;
-    float aspect;
-    float near;
-    float far;
-    bool isPrimary;
-};
 
 struct MaterialView {
     uint32_t modelIndex;
@@ -35,8 +26,9 @@ struct RenderView3D {
     std::vector<UUID> models;
     std::vector<BoundsView> bounds;
     std::vector<glm::mat4> transforms;
-    std::vector<CameraView> cameras;
     std::vector<MaterialView> materials;
     std::vector<AnimationView> animations;
+
+    static RenderView3D fromScene(class Scene *scene);
 };
 }; // namespace SYN
