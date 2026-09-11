@@ -138,7 +138,6 @@ void Application::run() {
 
         m_EngineContext.projectConfig.assetManager->resolvePendingDeletions();
         m_EngineContext.renderer->afterDraw();
-        m_EngineContext.debugDraw->clear();
 
         if (usingGL) {
             m_EngineContext.glContext->flushDeferredDeletes();
