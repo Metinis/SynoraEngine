@@ -4,6 +4,7 @@
 #include "MaterialComponent.h"
 #include "ModelComponent.h"
 #include "ParentComponent.h"
+#include "RenderTargetComponent.h"
 #include "SkeletalAnimationComponent.h"
 #include "TagComponent.h"
 #include "TransformComponent.h"
