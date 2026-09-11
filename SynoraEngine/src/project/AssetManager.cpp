@@ -72,9 +72,16 @@ void AssetManager::resolvePendingDeletions() {
     }
 }
 
-std::optional<UUID> AssetManager::uuidFromKey(std::string_view key) {
+std::optional<UUID> AssetManager::uuidFromKey(std::string_view key) const {
     if (auto it = m_KeyToUUID.find(std::string(key));
         it != m_KeyToUUID.cend()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> AssetManager::keyFromUUID(UUID id) const {
+    if (auto it = m_UUIDToKey.find(id); it != m_UUIDToKey.cend()) {
         return it->second;
     }
     return std::nullopt;

@@ -38,7 +38,8 @@ class AssetManager {
         return pool->getRefMut(id);
     }
 
-    std::optional<UUID> uuidFromKey(std::string_view key);
+    std::optional<UUID> uuidFromKey(std::string_view key) const;
+    std::optional<std::string> keyFromUUID(UUID id) const;
 
     template <typename AssetT, typename ImporterT> void registerImporter() {
         static_assert(std::derived_from<ImporterT, AssetImporter<AssetT>>);
