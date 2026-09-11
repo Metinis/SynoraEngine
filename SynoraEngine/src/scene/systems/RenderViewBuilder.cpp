@@ -85,14 +85,6 @@ void RenderViewBuilder::onRender() {
     RenderView3D mainSceneView = RenderView3D::fromScene(scene);
     m_Renderer->beginFrame(mainSceneView);
 
-    if (!m_DebugDraw->m_LinesDepth.empty()) {
-        m_Renderer->submitLineList(m_DebugDraw->m_LinesDepth, true);
-    }
-
-    if (!m_DebugDraw->m_LinesNoDepth.empty()) {
-        m_Renderer->submitLineList(m_DebugDraw->m_LinesNoDepth, false);
-    }
-
     while (!renderTargetQueue.empty()) {
         RenderTargetSubmission command = renderTargetQueue.top();
         m_Renderer->draw(command.camera, command.transform, command.target);
