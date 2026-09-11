@@ -1966,6 +1966,53 @@ void SYN::gfx::gl::Renderer::beginFrame(const RenderView3D &sceneDescription) {
         createDrawCommand(*m_Context, model, transform, meshBounds,
                           materialOverride, boneMatrices);
     }
+
+    updateMsaaFramebuffer(*m_Context);
+    updateHdrFramebuffer(*m_Context);
+
+    // Update anisotropy of all objects submitted to draw command
+    // TODO: Only update the anisotropy and not irrelevant sampler parameters.
+    // Only have to do it once per unique model (set of meshes) as multiple draw
+    // commands may refer to the same model.
+    {
+        if (m_AnisotropicUpdate) {
+            m_Context->updateSampler(m_DefaultModelSampler,
+                                     m_DefaultModelSamplerDesc);
+        }
+
+        for (const DrawCommand &cmd : m_DrawCommandList) {
+            const Model *model =
+                m_ModelRegistry.getResourceImmutableRef(cmd.modelHandle)
+                    .value();
+            for (const Mesh &mesh : model->meshesOpaque) {
+                if (mesh.material.sampler.has_value() &&
+                    mesh.material.samplerDesc.has_value() &&
+                    m_AnisotropicUpdate) {
+                    SamplerDesc samplerDesc = mesh.material.samplerDesc.value();
+                    samplerDesc.anisotropicLevel = glm::min(
+                        samplerDesc.anisotropicLevel, m_AnisotropicFilter);
+                    m_Context->updateSampler(mesh.material.sampler.value(),
+                                             samplerDesc);
+                }
+            }
+            for (const Mesh &mesh : model->meshesMasked) {
+                if (mesh.material.sampler.has_value() &&
+                    mesh.material.samplerDesc.has_value() &&
+                    m_AnisotropicUpdate) {
+                    SamplerDesc samplerDesc = mesh.material.samplerDesc.value();
+                    samplerDesc.anisotropicLevel = glm::min(
+                        samplerDesc.anisotropicLevel, m_AnisotropicFilter);
+                    m_Context->updateSampler(mesh.material.sampler.value(),
+                                             samplerDesc);
+                }
+            }
+        }
+        m_AnisotropicUpdate = false;
+    }
+
+    if (m_DirectionalLight.castsShadows) {
+        drawDirectionalCSM(*m_Context, m_DirectionalLight);
+    }
 }
 
 void SYN::gfx::gl::Renderer::endFrame() {
@@ -3358,49 +3405,6 @@ void SYN::gfx::gl::Renderer::draw(CameraComponent camera,
         glm::radians(m_MainCamera.fovYDegrees), m_MainCamera.aspect,
         m_MainCamera.nearPlane, m_MainCamera.farPlane);
 
-    updateMsaaFramebuffer(*m_Context);
-    updateHdrFramebuffer(*m_Context);
-
-    // Update anisotropy of all objects submitted to draw command
-    // TODO: Only update the anisotropy and not irrelevant sampler parameters.
-    // Only have to do it once per unique model (set of meshes) as multiple draw
-    // commands may refer to the same model.
-    {
-        if (m_AnisotropicUpdate) {
-            m_Context->updateSampler(m_DefaultModelSampler,
-                                     m_DefaultModelSamplerDesc);
-        }
-
-        for (const DrawCommand &cmd : m_DrawCommandList) {
-            const Model *model =
-                m_ModelRegistry.getResourceImmutableRef(cmd.modelHandle)
-                    .value();
-            for (const Mesh &mesh : model->meshesOpaque) {
-                if (mesh.material.sampler.has_value() &&
-                    mesh.material.samplerDesc.has_value() &&
-                    m_AnisotropicUpdate) {
-                    SamplerDesc samplerDesc = mesh.material.samplerDesc.value();
-                    samplerDesc.anisotropicLevel = glm::min(
-                        samplerDesc.anisotropicLevel, m_AnisotropicFilter);
-                    m_Context->updateSampler(mesh.material.sampler.value(),
-                                             samplerDesc);
-                }
-            }
-            for (const Mesh &mesh : model->meshesMasked) {
-                if (mesh.material.sampler.has_value() &&
-                    mesh.material.samplerDesc.has_value() &&
-                    m_AnisotropicUpdate) {
-                    SamplerDesc samplerDesc = mesh.material.samplerDesc.value();
-                    samplerDesc.anisotropicLevel = glm::min(
-                        samplerDesc.anisotropicLevel, m_AnisotropicFilter);
-                    m_Context->updateSampler(mesh.material.sampler.value(),
-                                             samplerDesc);
-                }
-            }
-        }
-        m_AnisotropicUpdate = false;
-    }
-
     // Set per frame constant UBOs
     {
         CameraConstants cameraConstants{};
@@ -3432,10 +3436,6 @@ void SYN::gfx::gl::Renderer::draw(CameraComponent camera,
         m_CurrentFrustum = Frustum::fromViewProjectionMatrix(view, projection);
     }
     auto environmentIt = m_NameToEnvironment.find(m_CurrentEnvironment);
-
-    if (m_DirectionalLight.castsShadows) {
-        drawDirectionalCSM(*m_Context, m_DirectionalLight);
-    }
 
     {
         TracyGpuZone("Forward");
@@ -3480,16 +3480,22 @@ void SYN::gfx::gl::Renderer::draw(CameraComponent camera,
 
         {
             std::optional<Handle<Framebuffer>> finalTarget = std::nullopt;
+            Viewport finalViewport = m_ScreenViewport;
+
             if (renderTarget.has_value()) {
                 UUID renderTargetId = renderTarget.value();
                 createRenderTarget(*m_Context, renderTargetId);
+                const RenderTargetData *renderTargetData =
+                    m_AssetManager->get<RenderTargetData>(renderTargetId);
                 finalTarget = std::get<RenderTarget>(
                                   m_UUIDToHandle.at(renderTargetId).handle)
                                   .framebuffer;
+                finalViewport.width = renderTargetData->width;
+                finalViewport.height = renderTargetData->height;
             }
             Pass hdrPass = m_Context->beginPass(
                 {finalTarget, environmentIt->second.clearColor, false, false,
-                 false, m_ScreenViewport});
+                 false, finalViewport});
             PipelineState hdrPipeline;
             hdrPipeline.shader =
                 m_ShaderCache.getShaderHandle(*m_Context, "hdr", 0);
@@ -3506,6 +3512,9 @@ void SYN::gfx::gl::Renderer::draw(CameraComponent camera,
             hdrPass.drawIndexed(6);
         }
     }
+
+    m_GroupCache.clear();
+    m_GroupStateCache.clear();
 }
 
 void SYN::gfx::gl::Renderer::setGamma(float gamma) {
