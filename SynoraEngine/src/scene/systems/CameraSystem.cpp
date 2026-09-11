@@ -161,10 +161,8 @@ void SYN::CameraSystem::init(EngineContext *ctx) {
     gameplayCtx->addInputVector("FlyMovement",
                                 {Action::MoveUp, Action::MoveDown});
 
-    gameplayCtx->addInputVectorCallback("FlyMovement", [&](float x, float y) {
-        m_Dy = -y;
-        spdlog::info("mdy = {}", m_Dy);
-    });
+    gameplayCtx->addInputVectorCallback("FlyMovement",
+                                        [&](float x, float y) { m_Dy = -y; });
 
     gameplayCtx->addInputVectorCallback("GroundMovement",
                                         [&](float x, float z) {
