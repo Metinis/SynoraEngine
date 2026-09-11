@@ -1,6 +1,7 @@
 #include <SynoraEngine/project/AssetManager.h>
 #include <SynoraEngine/project/assets/MaterialData.h>
 #include <SynoraEngine/project/assets/ModelData.h>
+#include <SynoraEngine/project/assets/RenderTargetData.h>
 #include <SynoraEngine/project/assets/TextureData.h>
 
 #include <SynoraEngine/core/Application.h>
@@ -76,6 +77,57 @@ createDefaultShader(SYN::gfx::gl::Context &context) {
 
     return context.createShader(defaultVertexSource, defaultFragmentSource)
         .value();
+}
+
+SYN::gfx::gl::TextureFormat
+renderTargetFormatToGL(SYN::RenderTargetData::Format format) {
+    SYN::gfx::gl::TextureFormat textureFormat =
+        SYN::gfx::gl::TextureFormat::RGBA8;
+    switch (format) {
+    case SYN::RenderTargetData::Format::R8:
+        textureFormat = SYN::gfx::gl::TextureFormat::R8;
+        break;
+    case SYN::RenderTargetData::Format::RGBA8:
+        break;
+    case SYN::RenderTargetData::Format::R32UI:
+        textureFormat = SYN::gfx::gl::TextureFormat::R32UI;
+        break;
+    case SYN::RenderTargetData::Format::RGBA8_SRGB:
+        textureFormat = SYN::gfx::gl::TextureFormat::SRGBA;
+        break;
+    case SYN::RenderTargetData::Format::RGBA16F:
+        textureFormat = SYN::gfx::gl::TextureFormat::RGBA16F;
+        break;
+    case SYN::RenderTargetData::Format::RGBA32F:
+        textureFormat = SYN::gfx::gl::TextureFormat::RGBA32F;
+        break;
+    case SYN::RenderTargetData::Format::RG16F:
+        textureFormat = SYN::gfx::gl::TextureFormat::RG16F;
+        break;
+    case SYN::RenderTargetData::Format::RG32F:
+        textureFormat = SYN::gfx::gl::TextureFormat::RG32F;
+        break;
+    case SYN::RenderTargetData::Format::DEPTH24:
+        textureFormat = SYN::gfx::gl::TextureFormat::Depth24;
+        break;
+    case SYN::RenderTargetData::Format::DEPTH24_STENCIL8:
+        textureFormat = SYN::gfx::gl::TextureFormat::Depth24Stencil8;
+        break;
+    case SYN::RenderTargetData::Format::DEPTH32:
+        textureFormat = SYN::gfx::gl::TextureFormat::Depth32;
+    }
+    return textureFormat;
+}
+
+SYN::gfx::gl::TextureDesc
+createTextureDescFromRenderTarget(const SYN::RenderTargetData &renderTarget,
+                                  SYN::RenderTargetData::Format format) {
+    SYN::gfx::gl::TextureDesc desc;
+    desc.width = renderTarget.width;
+    desc.height = renderTarget.height;
+    desc.format = renderTargetFormatToGL(format);
+    desc.sampleCount = renderTarget.sampleCount;
+    return desc;
 }
 
 SYN::gfx::gl::Mesh
@@ -311,6 +363,10 @@ GLenum getInternalTextureFormat(SYN::gfx::gl::TextureFormat format) {
     case SYN::gfx::gl::TextureFormat::RG8:
     case SYN::gfx::gl::TextureFormat::R8:
         return GL_R8;
+    case SYN::gfx::gl::TextureFormat::R32UI:
+        return GL_R32UI;
+    case SYN::gfx::gl::TextureFormat::Depth32:
+        return GL_DEPTH_COMPONENT32;
     case SYN::gfx::gl::TextureFormat::Depth24:
         return GL_DEPTH_COMPONENT24;
     case SYN::gfx::gl::TextureFormat::Depth16:
@@ -346,9 +402,13 @@ GLenum getTextureFormat(SYN::gfx::gl::TextureFormat format) {
         return GL_RG;
     case SYN::gfx::gl::TextureFormat::R8:
         return GL_RED;
+    case SYN::gfx::gl::TextureFormat::R32UI:
+        return GL_RED;
     case SYN::gfx::gl::TextureFormat::Depth16:
         return GL_DEPTH_COMPONENT;
     case SYN::gfx::gl::TextureFormat::Depth24:
+        return GL_DEPTH_COMPONENT;
+    case SYN::gfx::gl::TextureFormat::Depth32:
         return GL_DEPTH_COMPONENT;
     case SYN::gfx::gl::TextureFormat::Depth24Stencil8:
         return GL_DEPTH_STENCIL;
@@ -1832,6 +1892,8 @@ SYN::gfx::gl::RenderTechnique::setShaderFeature(uint32_t defaultFeature) {
     return *this;
 }
 
+// TODO: Update Renderer description because this is outdated LOL
+//
 // Renderer
 // High level rendering API for users who want more out of the box with a simple
 // interface.
@@ -1865,31 +1927,8 @@ SYN::gfx::gl::RenderTechnique::setShaderFeature(uint32_t defaultFeature) {
 // etc.
 
 // TODO: Submit proper render commands based on scene description
-void SYN::gfx::gl::Renderer::submitFrame(const RenderView3D &sceneDescription) {
+void SYN::gfx::gl::Renderer::beginFrame(const RenderView3D &sceneDescription) {
     uint32_t modelCount = sceneDescription.models.size();
-
-    Camera sceneCamera;
-    auto cameraIt = std::find_if(
-        sceneDescription.cameras.cbegin(), sceneDescription.cameras.cend(),
-        [](const CameraView &camera) { return camera.isPrimary; });
-    if (cameraIt != sceneDescription.cameras.cend()) {
-        sceneCamera.fovYDegrees = cameraIt->fov;
-        sceneCamera.nearPlane = cameraIt->near;
-        sceneCamera.farPlane = cameraIt->far;
-        sceneCamera.aspect = cameraIt->aspect;
-
-        glm::vec3 pos, scale, skew;
-        glm::quat orientation;
-        glm::vec4 perspective;
-
-        glm::decompose(cameraIt->worldTransform, scale, orientation, pos, skew,
-                       perspective);
-
-        sceneCamera.position = pos;
-        sceneCamera.target = pos + (orientation * glm::vec3(0.0f, 0.0f, -1.0f));
-        sceneCamera.up = orientation * sceneCamera.up;
-    }
-    beginFrame(sceneCamera);
 
     std::unordered_map<uint32_t, std::vector<MaterialView>> materialMap;
     std::unordered_map<uint32_t, std::span<const glm::mat4>> animationMap;
@@ -1924,9 +1963,111 @@ void SYN::gfx::gl::Renderer::submitFrame(const RenderView3D &sceneDescription) {
             boneMatrices = it->second;
         }
 
-        submit(*m_Context, model, transform, meshBounds, materialOverride,
-               boneMatrices);
+        createDrawCommand(*m_Context, model, transform, meshBounds,
+                          materialOverride, boneMatrices);
     }
+
+    updateMsaaFramebuffer(*m_Context);
+    updateHdrFramebuffer(*m_Context);
+
+    // Update anisotropy of all objects submitted to draw command
+    // TODO: Only update the anisotropy and not irrelevant sampler parameters.
+    // Only have to do it once per unique model (set of meshes) as multiple draw
+    // commands may refer to the same model.
+    {
+        if (m_AnisotropicUpdate) {
+            m_Context->updateSampler(m_DefaultModelSampler,
+                                     m_DefaultModelSamplerDesc);
+        }
+
+        for (const DrawCommand &cmd : m_DrawCommandList) {
+            const Model *model =
+                m_ModelRegistry.getResourceImmutableRef(cmd.modelHandle)
+                    .value();
+            for (const Mesh &mesh : model->meshesOpaque) {
+                if (mesh.material.sampler.has_value() &&
+                    mesh.material.samplerDesc.has_value() &&
+                    m_AnisotropicUpdate) {
+                    SamplerDesc samplerDesc = mesh.material.samplerDesc.value();
+                    samplerDesc.anisotropicLevel = glm::min(
+                        samplerDesc.anisotropicLevel, m_AnisotropicFilter);
+                    m_Context->updateSampler(mesh.material.sampler.value(),
+                                             samplerDesc);
+                }
+            }
+            for (const Mesh &mesh : model->meshesMasked) {
+                if (mesh.material.sampler.has_value() &&
+                    mesh.material.samplerDesc.has_value() &&
+                    m_AnisotropicUpdate) {
+                    SamplerDesc samplerDesc = mesh.material.samplerDesc.value();
+                    samplerDesc.anisotropicLevel = glm::min(
+                        samplerDesc.anisotropicLevel, m_AnisotropicFilter);
+                    m_Context->updateSampler(mesh.material.sampler.value(),
+                                             samplerDesc);
+                }
+            }
+        }
+        m_AnisotropicUpdate = false;
+    }
+}
+
+void SYN::gfx::gl::Renderer::endFrame() {
+    m_DrawCommandList.clear();
+    m_GroupCache.clear();
+    m_GroupStateCache.clear();
+    m_FrameBoneMatrices.clear();
+
+    m_DebugDrawData.depthLines.clear();
+    m_DebugDrawData.overlayLines.clear();
+}
+
+std::optional<ImTextureID>
+SYN::gfx::gl::Renderer::getHandleForImGui(UUID renderTarget,
+                                          std::optional<uint32_t> index) {
+    auto handle = m_UUIDToHandle.find(renderTarget);
+    if (handle == m_UUIDToHandle.cend())
+        return std::nullopt;
+    const RenderTarget &target = std::get<RenderTarget>(handle->second.handle);
+
+    Handle<Texture> texture;
+    if (index.has_value() && index.value() < target.colorAttachments.size()) {
+        texture = std::get<Handle<Texture>>(
+            target.colorAttachments[index.value()].handle);
+    } else if (!index.has_value() && target.depthAttachment.has_value()) {
+        texture =
+            std::get<Handle<Texture>>(target.depthAttachment.value().handle);
+    } else {
+        return std::nullopt;
+    }
+
+    return (ImTextureID)(intptr_t)(m_Context->getTextureId(texture).value());
+}
+
+void SYN::gfx::gl::Renderer::beforeDraw() {
+    auto [width, height] = m_Window->getScreenSize();
+    resize(width, height);
+}
+
+void SYN::gfx::gl::Renderer::afterDraw() {
+    for (auto &[uuid, resource] : m_DeferredResourceSwap) {
+        std::visit(
+            [&](auto &&arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, Handle<Texture>>) {
+                    destroyTextureResource(*m_Context, arg);
+                } else if constexpr (std::is_same_v<T, Handle<Model>>) {
+                    destroyModelResource(*m_Context, arg);
+                } else if constexpr (std::is_same_v<T, RenderTarget>) {
+                    destroyRenderTargetResource(*m_Context, arg);
+                }
+            },
+            resource.oldHandle.handle);
+        m_UUIDToHandle[uuid] = {resource.newHandle.handle};
+    }
+
+    m_DeferredResourceSwap.clear();
+
+    TracyGpuCollect;
 }
 
 void SYN::gfx::gl::Renderer::submitLineList(
@@ -1940,12 +2081,6 @@ void SYN::gfx::gl::Renderer::submitLineList(
     }
 }
 
-void SYN::gfx::gl::Renderer::drawScene() {
-    auto [width, height] = m_Window->getScreenSize();
-    resize(width, height);
-    endFrame(*m_Context);
-}
-
 SYN::gfx::gl::Renderer::Renderer(const RendererConfig &config) {
     m_RenderConfig = config;
     setExposure(glm::max(0.0f, config.exposure));
@@ -1954,6 +2089,9 @@ SYN::gfx::gl::Renderer::Renderer(const RendererConfig &config) {
 SYN::gfx::gl::Renderer::~Renderer() {}
 
 void SYN::gfx::gl::Renderer::createModel(Context &context, UUID model) {
+    if (m_UUIDToHandle.contains(model))
+        return;
+
     const ModelData *modelData = m_AssetManager->get<ModelData>(model);
 
     Model loadedModel;
@@ -1983,16 +2121,8 @@ void SYN::gfx::gl::Renderer::createModel(Context &context, UUID model) {
     m_UUIDToHandle[model] = {handle.value()};
 }
 
-// Material data is destroyed independently of mesh data.
-void SYN::gfx::gl::Renderer::destroyModel(Context &context, UUID model) {
-    auto it = m_UUIDToHandle.find(model);
-    if (it == m_UUIDToHandle.cend()) {
-        spdlog::warn("Unable to destroy model for unmapped UUID");
-        return;
-    }
-
-    Handle<Model> modelHandle = std::get<Handle<Model>>(it->second.handle);
-
+void SYN::gfx::gl::Renderer::destroyModelResource(Context &context,
+                                                  Handle<Model> modelHandle) {
     if (!m_ModelRegistry.isValidHandle(modelHandle)) {
         return;
     }
@@ -2017,6 +2147,136 @@ void SYN::gfx::gl::Renderer::destroyModel(Context &context, UUID model) {
     for (const Mesh &mesh : modelResource.meshesMasked) {
         deleteMesh(mesh);
     }
+}
+
+void SYN::gfx::gl::Renderer::destroyTextureResource(
+    Context &context, Handle<Texture> textureHandle) {
+    context.deleteTexture(textureHandle);
+}
+
+// Material data is destroyed independently of mesh data.
+void SYN::gfx::gl::Renderer::destroyModel(Context &context, UUID model) {
+    auto it = m_UUIDToHandle.find(model);
+    if (it == m_UUIDToHandle.cend()) {
+        spdlog::warn("Unable to destroy model for unmapped UUID");
+        return;
+    }
+
+    Handle<Model> modelHandle = std::get<Handle<Model>>(it->second.handle);
+
+    destroyModelResource(context, modelHandle);
+
+    m_UUIDToHandle.erase(it);
+}
+
+std::optional<SYN::gfx::gl::RenderTarget>
+SYN::gfx::gl::Renderer::createRenderTargetResource(
+    Context &context, const RenderTargetData *renderTargetData) {
+    RenderTarget output;
+
+    for (uint32_t i = 0; i < renderTargetData->colorCount; ++i) {
+        RenderTargetData::Format format = renderTargetData->color.at(i);
+        TextureDesc desc =
+            createTextureDescFromRenderTarget(*renderTargetData, format);
+        std::optional<Handle<Texture>> texture = context.createTexture(desc);
+        if (!texture.has_value())
+            return std::nullopt;
+        output.colorAttachments.emplace_back(texture.value());
+    }
+
+    if (renderTargetData->depth.has_value()) {
+        RenderTargetData::Format format = renderTargetData->depth.value();
+        TextureDesc desc =
+            createTextureDescFromRenderTarget(*renderTargetData, format);
+        std::optional<Handle<Texture>> texture = context.createTexture(desc);
+        if (!texture.has_value())
+            return std::nullopt;
+        output.depthAttachment = {texture.value()};
+    }
+
+    FramebufferDesc framebufferDesc;
+    framebufferDesc.colorAttachments = output.colorAttachments;
+    framebufferDesc.depthStencilAttachment = output.depthAttachment;
+    framebufferDesc.isDepthOnly = output.colorAttachments.empty();
+
+    std::optional<Handle<Framebuffer>> framebuffer =
+        context.createFramebuffer(framebufferDesc);
+    if (!framebuffer.has_value())
+        return std::nullopt;
+
+    output.framebuffer = framebuffer.value();
+
+    return output;
+}
+
+void SYN::gfx::gl::Renderer::createRenderTarget(Context &context,
+                                                UUID renderTarget) {
+    if (m_UUIDToHandle.contains(renderTarget))
+        return;
+
+    const RenderTargetData *renderTargetData =
+        m_AssetManager->get<RenderTargetData>(renderTarget);
+
+    m_UUIDToHandle[renderTarget] = {
+        createRenderTargetResource(context, renderTargetData).value()};
+}
+
+void SYN::gfx::gl::Renderer::updateRenderTarget(Context &context,
+                                                UUID renderTarget) {
+    auto it = m_UUIDToHandle.find(renderTarget);
+    if (it == m_UUIDToHandle.cend()) {
+        spdlog::warn("Unable to update render target as it is not mapped.");
+        return;
+    }
+
+    if (m_DeferredResourceSwap.contains(renderTarget)) {
+        spdlog::warn("Unable to update render target as it already has a "
+                     "pending update.");
+        return;
+    }
+
+    DeferredResourceSwap swap;
+    swap.oldHandle = it->second;
+
+    const RenderTargetData *renderTargetData =
+        m_AssetManager->get<RenderTargetData>(renderTarget);
+
+    auto newRenderTarget =
+        createRenderTargetResource(context, renderTargetData);
+    if (!newRenderTarget.has_value()) {
+        spdlog::error("Cannot create new render target update.");
+        return;
+    }
+
+    swap.newHandle = {newRenderTarget.value()};
+
+    m_DeferredResourceSwap.emplace(renderTarget, swap);
+}
+
+void SYN::gfx::gl::Renderer::destroyRenderTargetResource(
+    Context &context, RenderTarget renderTarget) {
+    context.deleteFramebuffer(renderTarget.framebuffer);
+    for (const AttachmentDesc &desc : renderTarget.colorAttachments) {
+        context.deleteTexture(std::get<Handle<Texture>>(desc.handle));
+    }
+    if (renderTarget.depthAttachment.has_value()) {
+        const AttachmentDesc &desc = renderTarget.depthAttachment.value();
+        context.deleteTexture(std::get<Handle<Texture>>(desc.handle));
+    }
+}
+
+void SYN::gfx::gl::Renderer::destroyRenderTarget(Context &context,
+                                                 UUID renderTarget) {
+    auto it = m_UUIDToHandle.find(renderTarget);
+    if (it == m_UUIDToHandle.cend()) {
+        spdlog::warn("Unable to destroy render target for unmapped UUID");
+        return;
+    }
+
+    RenderTarget renderTargetContainer =
+        std::get<RenderTarget>(it->second.handle);
+
+    destroyRenderTargetResource(context, renderTargetContainer);
 
     m_UUIDToHandle.erase(it);
 }
@@ -2475,10 +2735,12 @@ void SYN::gfx::gl::Renderer::init(EngineContext *engineContext) {
             [&](auto &&arg) {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, Handle<Texture>>) {
-                    m_Context->deleteTexture(arg);
+                    destroyTextureResource(*m_Context, arg);
                     m_UUIDToHandle.erase(handleIt);
                 } else if constexpr (std::is_same_v<T, Handle<Model>>) {
                     destroyModel(*m_Context, id);
+                } else if constexpr (std::is_same_v<T, RenderTarget>) {
+                    destroyRenderTarget(*m_Context, id);
                 }
             },
             resource.handle);
@@ -2763,17 +3025,13 @@ void SYN::gfx::gl::Renderer::destroyEnvironment(Context &context,
     m_NameToEnvironment.erase(it);
 }
 
-void SYN::gfx::gl::Renderer::beginFrame(const Camera &camera) {
-    m_MainCamera = camera;
-}
-
 void SYN::gfx::gl::Renderer::setDirectionalLight(
     const DirectionalLight &light) {
     m_DirectionalLight = light;
     m_DirectionalLight.direction = glm::normalize(m_DirectionalLight.direction);
 }
 
-void SYN::gfx::gl::Renderer::submit(
+void SYN::gfx::gl::Renderer::createDrawCommand(
     Context &context, UUID model, const glm::mat4 &transform,
     std::span<const AABB> meshBounds,
     std::span<const MaterialOverride> materialOverride,
@@ -2790,11 +3048,8 @@ void SYN::gfx::gl::Renderer::submit(
         }
     }
 
+    createModel(context, model);
     auto it = m_UUIDToHandle.find(model);
-    if (it == m_UUIDToHandle.cend()) {
-        createModel(context, model);
-    }
-    it = m_UUIDToHandle.find(model);
 
     m_DrawCommandList.emplace_back(
         std::get<Handle<Model>>(it->second.handle), transform,
@@ -3110,7 +3365,30 @@ void SYN::gfx::gl::Renderer::setRenderScale(float renderScale) {
     m_HdrFramebuffer.update = true;
 }
 
-void SYN::gfx::gl::Renderer::endFrame(Context &context) {
+void SYN::gfx::gl::Renderer::draw(CameraComponent camera,
+                                  glm::mat4 cameraTransform,
+                                  std::optional<UUID> renderTarget) {
+
+    // Set main camera from camera component and transform component
+    {
+        m_MainCamera.fovYDegrees = camera.fovDegrees;
+        m_MainCamera.nearPlane = camera.nearPlane;
+        m_MainCamera.farPlane = camera.farPlane;
+        m_MainCamera.aspect = camera.aspectRatio;
+
+        glm::vec3 position, scale, skew;
+        glm::quat rotation;
+        glm::vec4 perspective;
+
+        glm::decompose(cameraTransform, scale, rotation, position, skew,
+                       perspective);
+
+        m_MainCamera.position = position;
+        m_MainCamera.target =
+            position + (rotation * glm::vec3(0.0f, 0.0f, -1.0f));
+        m_MainCamera.up = rotation * glm::vec3(0.0f, 1.0f, 0.0f);
+    }
+
     Viewport renderViewport = m_ScreenViewport;
     auto [renderWidth, renderHeight] = getRenderResolution();
     renderViewport.width = renderWidth;
@@ -3122,49 +3400,6 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
     glm::mat4 projMatrix = glm::perspectiveRH_NO(
         glm::radians(m_MainCamera.fovYDegrees), m_MainCamera.aspect,
         m_MainCamera.nearPlane, m_MainCamera.farPlane);
-
-    updateMsaaFramebuffer(context);
-    updateHdrFramebuffer(context);
-
-    // Update anisotropy of all objects submitted to draw command
-    // TODO: Only update the anisotropy and not irrelevant sampler parameters.
-    // Only have to do it once per unique model (set of meshes) as multiple draw
-    // commands may refer to the same model.
-    {
-        if (m_AnisotropicUpdate) {
-            context.updateSampler(m_DefaultModelSampler,
-                                  m_DefaultModelSamplerDesc);
-        }
-
-        for (const DrawCommand &cmd : m_DrawCommandList) {
-            const Model *model =
-                m_ModelRegistry.getResourceImmutableRef(cmd.modelHandle)
-                    .value();
-            for (const Mesh &mesh : model->meshesOpaque) {
-                if (mesh.material.sampler.has_value() &&
-                    mesh.material.samplerDesc.has_value() &&
-                    m_AnisotropicUpdate) {
-                    SamplerDesc samplerDesc = mesh.material.samplerDesc.value();
-                    samplerDesc.anisotropicLevel = glm::min(
-                        samplerDesc.anisotropicLevel, m_AnisotropicFilter);
-                    context.updateSampler(mesh.material.sampler.value(),
-                                          samplerDesc);
-                }
-            }
-            for (const Mesh &mesh : model->meshesMasked) {
-                if (mesh.material.sampler.has_value() &&
-                    mesh.material.samplerDesc.has_value() &&
-                    m_AnisotropicUpdate) {
-                    SamplerDesc samplerDesc = mesh.material.samplerDesc.value();
-                    samplerDesc.anisotropicLevel = glm::min(
-                        samplerDesc.anisotropicLevel, m_AnisotropicFilter);
-                    context.updateSampler(mesh.material.sampler.value(),
-                                          samplerDesc);
-                }
-            }
-        }
-        m_AnisotropicUpdate = false;
-    }
 
     // Set per frame constant UBOs
     {
@@ -3179,11 +3414,11 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
         lightConstants.intensity = m_DirectionalLight.intensity;
         lightConstants.castShadow = m_DirectionalLight.castsShadows;
 
-        context.updateBuffer(m_CameraConstants, 0, sizeof(CameraConstants),
-                             &cameraConstants);
+        m_Context->updateBuffer(m_CameraConstants, 0, sizeof(CameraConstants),
+                                &cameraConstants);
 
-        context.updateBuffer(m_LightConstants, 0, sizeof(LightConstants),
-                             &lightConstants);
+        m_Context->updateBuffer(m_LightConstants, 0, sizeof(LightConstants),
+                                &lightConstants);
     }
 
     {
@@ -3196,11 +3431,12 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
 
         m_CurrentFrustum = Frustum::fromViewProjectionMatrix(view, projection);
     }
-    auto environmentIt = m_NameToEnvironment.find(m_CurrentEnvironment);
 
     if (m_DirectionalLight.castsShadows) {
-        drawDirectionalCSM(context, m_DirectionalLight);
+        drawDirectionalCSM(*m_Context, m_DirectionalLight);
     }
+
+    auto environmentIt = m_NameToEnvironment.find(m_CurrentEnvironment);
 
     {
         TracyGpuZone("Forward");
@@ -3211,19 +3447,19 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
             m_ZPrepass.setPassDesc({m_MsaaFramebuffer.handle,
                                     environmentIt->second.clearColor, true,
                                     true, false, renderViewport});
-            drawRenderItems(context, m_ZPrepass);
+            drawRenderItems(*m_Context, m_ZPrepass);
             m_ForwardPass.setPassDesc({m_MsaaFramebuffer.handle, std::nullopt,
                                        false, true, false, renderViewport});
-            drawRenderItems(context, m_ForwardPass);
+            drawRenderItems(*m_Context, m_ForwardPass);
 
             if (environmentIt->second.type != Environment::Type::ClearColor) {
-                Pass pass =
-                    context.beginPass({m_MsaaFramebuffer.handle, std::nullopt,
-                                       false, true, false, renderViewport});
+                Pass pass = m_Context->beginPass({m_MsaaFramebuffer.handle,
+                                                  std::nullopt, false, true,
+                                                  false, renderViewport});
                 PipelineState pipeline;
                 pipeline.depth.writeEnabled = false;
                 pipeline.shader =
-                    m_ShaderCache.getShaderHandle(context, "skybox", 0);
+                    m_ShaderCache.getShaderHandle(*m_Context, "skybox", 0);
                 pipeline.depth.test = DepthFunc::LessEqual;
                 pass.usePipeline(pipeline);
 
@@ -3236,20 +3472,34 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
                 pass.draw(36);
             }
 
-            drawDebugPass(context);
+            drawDebugPass(*m_Context);
         }
 
-        context.blitFramebuffer(m_MsaaFramebuffer.handle,
-                                m_HdrFramebuffer.handle, renderViewport,
-                                renderViewport);
+        m_Context->blitFramebuffer(m_MsaaFramebuffer.handle,
+                                   m_HdrFramebuffer.handle, renderViewport,
+                                   renderViewport);
 
         {
-            Pass hdrPass = context.beginPass(
-                {std::nullopt, environmentIt->second.clearColor, false, false,
-                 false, m_ScreenViewport});
+            std::optional<Handle<Framebuffer>> finalTarget = std::nullopt;
+            Viewport finalViewport = m_ScreenViewport;
+
+            if (renderTarget.has_value()) {
+                UUID renderTargetId = renderTarget.value();
+                createRenderTarget(*m_Context, renderTargetId);
+                const RenderTargetData *renderTargetData =
+                    m_AssetManager->get<RenderTargetData>(renderTargetId);
+                finalTarget = std::get<RenderTarget>(
+                                  m_UUIDToHandle.at(renderTargetId).handle)
+                                  .framebuffer;
+                finalViewport.width = renderTargetData->width;
+                finalViewport.height = renderTargetData->height;
+            }
+            Pass hdrPass = m_Context->beginPass(
+                {finalTarget, environmentIt->second.clearColor, false, false,
+                 false, finalViewport});
             PipelineState hdrPipeline;
             hdrPipeline.shader =
-                m_ShaderCache.getShaderHandle(context, "hdr", 0);
+                m_ShaderCache.getShaderHandle(*m_Context, "hdr", 0);
 
             hdrPass.usePipeline(hdrPipeline);
 
@@ -3264,12 +3514,8 @@ void SYN::gfx::gl::Renderer::endFrame(Context &context) {
         }
     }
 
-    m_DrawCommandList.clear();
     m_GroupCache.clear();
     m_GroupStateCache.clear();
-    m_FrameBoneMatrices.clear();
-
-    TracyGpuCollect;
 }
 
 void SYN::gfx::gl::Renderer::setGamma(float gamma) {
@@ -3764,7 +4010,4 @@ void SYN::gfx::gl::Renderer::drawDebugPass(Context &context) {
         overlayLinePass.bindVertexArray(m_DebugDrawData.lineVAO);
         overlayLinePass.drawInstanced(4, overlayLines.size());
     }
-
-    m_DebugDrawData.depthLines.clear();
-    m_DebugDrawData.overlayLines.clear();
 }

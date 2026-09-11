@@ -87,6 +87,8 @@ void Application::init() {
 }
 
 void Application::run() {
+    bool usingGL = m_EngineContext.windowConfig.openGLConfig.has_value();
+
     // while running and window open
     double lastTime{glfwGetTime()};
     while (m_IsRunning && m_EngineContext.window->isRunning()) {
@@ -94,7 +96,7 @@ void Application::run() {
         m_EngineContext.inputManager->processInputQueue();
         m_EngineContext.sceneManager->handleSwitch();
 
-        m_EngineContext.renderer->onBeginFrame();
+        m_EngineContext.renderer->beforeDraw();
 
         double currentTime{glfwGetTime()};
         float dt{static_cast<float>(currentTime - lastTime)};
@@ -103,7 +105,7 @@ void Application::run() {
             l->onUpdate(dt);
         }
 
-        if (!m_EngineContext.windowConfig.openGLConfig.has_value()) {
+        if (!usingGL) {
             ImGui_ImplVulkan_NewFrame();
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
@@ -116,12 +118,10 @@ void Application::run() {
             for (auto &l : m_Layers) {
                 l->onRender();
             }
-            m_EngineContext.renderer->drawScene();
         } else {
             for (auto &l : m_Layers) {
                 l->onRender();
             }
-            m_EngineContext.renderer->drawScene();
 
             ImGui_ImplOpenGL3_NewFrame();
             ImGui_ImplGlfw_NewFrame();
@@ -134,11 +134,16 @@ void Application::run() {
 
             gfx::gl::Context *context = m_EngineContext.glContext.get();
             context->present();
-            context->flushDeferredDeletes();
         }
-        m_EngineContext.renderer->onEndFrame();
-        m_EngineContext.debugDraw->clear();
+
         m_EngineContext.projectConfig.assetManager->resolvePendingDeletions();
+        m_EngineContext.renderer->afterDraw();
+        m_EngineContext.debugDraw->clear();
+
+        if (usingGL) {
+            m_EngineContext.glContext->flushDeferredDeletes();
+        }
+
         FrameMark;
     }
 }
