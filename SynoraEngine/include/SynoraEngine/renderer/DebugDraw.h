@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 
 namespace SYN {
+class IRenderViewBackend;
+
 class DebugDraw {
   public:
     struct Line {
@@ -21,7 +23,7 @@ class DebugDraw {
                        float thickness = 1.0f, bool depthTest = true);
 
     // Call at the end of the frame to clear all previously submitted draw data.
-    void clear();
+    void flush(IRenderViewBackend *renderer);
 
   private:
     friend class RenderViewBuilder;

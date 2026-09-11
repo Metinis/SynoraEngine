@@ -1,6 +1,7 @@
 #include <SynoraEngine/renderer/DebugDraw.h>
 
 #include <SynoraEngine/core/math/Frustum.h>
+#include <SynoraEngine/renderer/backends/IRenderViewBackend.h>
 
 namespace SYN {
 void DebugDraw::line(glm::vec3 a, glm::vec3 b, glm::vec3 color, float thickness,
@@ -79,7 +80,15 @@ void DebugDraw::cameraFrustum(glm::mat4 view, glm::mat4 projection,
     line(corners[1], corners[3], color, thickness, depthTest);
 }
 
-void DebugDraw::clear() {
+void DebugDraw::flush(IRenderViewBackend *renderer) {
+    if (!m_LinesDepth.empty()) {
+        renderer->submitLineList(m_LinesDepth, true);
+    }
+
+    if (!m_LinesNoDepth.empty()) {
+        renderer->submitLineList(m_LinesNoDepth, false);
+    }
+
     m_LinesDepth.clear();
     m_LinesNoDepth.clear();
 }
