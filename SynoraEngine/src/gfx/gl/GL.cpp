@@ -2009,10 +2009,6 @@ void SYN::gfx::gl::Renderer::beginFrame(const RenderView3D &sceneDescription) {
         }
         m_AnisotropicUpdate = false;
     }
-
-    if (m_DirectionalLight.castsShadows) {
-        drawDirectionalCSM(*m_Context, m_DirectionalLight);
-    }
 }
 
 void SYN::gfx::gl::Renderer::endFrame() {
@@ -3435,6 +3431,11 @@ void SYN::gfx::gl::Renderer::draw(CameraComponent camera,
 
         m_CurrentFrustum = Frustum::fromViewProjectionMatrix(view, projection);
     }
+
+    if (m_DirectionalLight.castsShadows) {
+        drawDirectionalCSM(*m_Context, m_DirectionalLight);
+    }
+
     auto environmentIt = m_NameToEnvironment.find(m_CurrentEnvironment);
 
     {
