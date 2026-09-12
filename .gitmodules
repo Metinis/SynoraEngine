@@ -31,3 +31,6 @@
 [submodule "SynoraEngine/3rdparty/tracy"]
 	path = SynoraEngine/3rdparty/tracy
 	url = https://github.com/wolfpld/tracy.git
+[submodule "SynoraEngine/3rdparty/ImGuizmo"]
+	path = SynoraEngine/3rdparty/ImGuizmo
+	url = https://github.com/CedricGuillemet/ImGuizmo.git

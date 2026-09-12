@@ -63,6 +63,10 @@ target_link_libraries(tinyfiledialogs
         glfw
 )
 
+set(IMGUIZMO_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+add_subdirectory(ImGuizmo)
+target_link_libraries(imguizmo PRIVATE imgui)
+
 option(SYNORA_ENABLE_PROFILING "Enable Tracy profiler instrumentation" ON)
 set(TRACY_ENABLE ${SYNORA_ENABLE_PROFILING} CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
