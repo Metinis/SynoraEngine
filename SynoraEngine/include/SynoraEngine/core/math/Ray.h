@@ -20,9 +20,9 @@ struct Ray {
 
     glm::vec3 positionAt(float t) const;
     static Ray from(glm::vec3 position, glm::vec3 direction);
-    static Ray screenToWorld(CameraComponent camera,
-                             TransformComponent transform, glm::vec2 screenPos,
-                             uint32_t width, uint32_t height);
+    static Ray screenToWorld(glm::mat4 viewProjection, glm::vec3 cameraPosition,
+                             glm::vec2 screenPos, uint32_t width,
+                             uint32_t height);
 
     std::optional<Hit> collidesWithAABB(AABB aabb) const;
     std::optional<Hit> collidesWithSphere(Sphere sphere) const;

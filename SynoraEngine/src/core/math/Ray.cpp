@@ -7,25 +7,14 @@ Ray Ray::from(glm::vec3 position, glm::vec3 direction) {
 
 glm::vec3 Ray::positionAt(float t) const { return position + direction * t; }
 
-Ray Ray::screenToWorld(CameraComponent camera, TransformComponent transform,
+Ray Ray::screenToWorld(glm::mat4 viewProjection, glm::vec3 cameraPosition,
                        glm::vec2 screenPos, uint32_t width, uint32_t height) {
     glm::vec3 ndc;
     ndc.x = (2.0f * screenPos.x) / (float)width - 1.0f;
     ndc.y = 1.0f - (2.0f * screenPos.y) / (float)height;
     ndc.z = 1.0f;
 
-    glm::vec3 forward = transform.rotation * glm::vec3(0.0f, 0.0f, -1.0f);
-
-    glm::vec3 up = transform.rotation * glm::vec3(0.0f, 1.0f, 0.0f);
-
-    glm::mat4 view =
-        glm::lookAtRH(transform.position, transform.position + forward, up);
-
-    glm::mat4 proj = glm::perspectiveRH_NO(glm::radians(camera.fovDegrees),
-                                           camera.aspectRatio, camera.nearPlane,
-                                           camera.farPlane);
-
-    glm::mat4 invCam = glm::inverse(proj * view);
+    glm::mat4 invCam = glm::inverse(viewProjection);
 
     glm::vec4 nearPoint = invCam * glm::vec4(ndc.x, ndc.y, 0.0f, 1.0f);
     glm::vec4 farPoint = invCam * glm::vec4(ndc.x, ndc.y, ndc.z, 1.0f);
@@ -35,7 +24,7 @@ Ray Ray::screenToWorld(CameraComponent camera, TransformComponent transform,
 
     glm::vec3 dir = glm::normalize(glm::vec3(farPoint) - glm::vec3(nearPoint));
 
-    return Ray::from(transform.position, dir);
+    return Ray::from(cameraPosition, dir);
 }
 
 std::optional<Ray::Hit> Ray::collidesWithAABB(AABB aabb) const {
