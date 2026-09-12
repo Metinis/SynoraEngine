@@ -93,6 +93,15 @@ void Application::run() {
     double lastTime{glfwGetTime()};
     while (m_IsRunning && m_EngineContext.window->isRunning()) {
         glfwPollEvents();
+
+        if (usingGL) {
+            ImGui_ImplOpenGL3_NewFrame();
+        } else {
+            ImGui_ImplVulkan_NewFrame();
+        }
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
         m_EngineContext.inputManager->processInputQueue();
         m_EngineContext.sceneManager->handleSwitch();
 
@@ -106,9 +115,6 @@ void Application::run() {
         }
 
         if (!usingGL) {
-            ImGui_ImplVulkan_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
-            ImGui::NewFrame();
             for (auto &l : m_Layers) {
                 l->onUIRender();
             }
@@ -123,9 +129,6 @@ void Application::run() {
                 l->onRender();
             }
 
-            ImGui_ImplOpenGL3_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
-            ImGui::NewFrame();
             for (auto &l : m_Layers) {
                 l->onUIRender();
             }
