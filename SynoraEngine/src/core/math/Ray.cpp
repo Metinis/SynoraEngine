@@ -5,6 +5,8 @@ Ray Ray::from(glm::vec3 position, glm::vec3 direction) {
     return {position, glm::normalize(direction)};
 }
 
+glm::vec3 Ray::positionAt(float t) const { return position + direction * t; }
+
 Ray Ray::screenToWorld(CameraComponent camera, TransformComponent transform,
                        glm::vec2 screenPos, uint32_t width, uint32_t height) {
     glm::vec3 ndc;
@@ -84,7 +86,7 @@ std::optional<Ray::Hit> Ray::collidesWithAABB(AABB aabb) const {
 
     Hit info;
     info.distance = tMin;
-    info.position = position + direction * info.distance;
+    info.position = positionAt(info.distance);
     info.normal = glm::vec3(0.0f);
     uint32_t hitAxis = isInside ? exitAxis : entryAxis;
     info.normal[hitAxis] = isInside ? glm::sign(direction[hitAxis])
@@ -128,7 +130,7 @@ std::optional<Ray::Hit> Ray::collidesWithSphere(Sphere sphere) const {
 
     Hit info;
     info.distance = tMin;
-    info.position = position + direction * info.distance;
+    info.position = positionAt(info.distance);
     info.normal = glm::normalize(info.position - sphere.center);
 
     return info;
@@ -150,7 +152,7 @@ std::optional<Ray::Hit> Ray::collidesWithPlane(Plane plane) const {
 
     Hit info;
     info.distance = tMin;
-    info.position = position + direction * info.distance;
+    info.position = positionAt(info.distance);
     info.normal = denom > 0.0f ? -normal : normal;
 
     return info;
