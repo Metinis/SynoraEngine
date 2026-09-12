@@ -46,6 +46,7 @@ target_link_libraries(
   PUBLIC
   glm::glm
   imgui
+  imguizmo
   EnTT::EnTT
   spdlog
   PRIVATE

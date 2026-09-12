@@ -5,6 +5,8 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_vulkan.h>
 
+#include <ImGuizmo.h>
+
 #include <spdlog/spdlog.h>
 
 #include <SynoraEngine/core/Application.h>
@@ -101,6 +103,7 @@ void Application::run() {
         }
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
 
         m_EngineContext.inputManager->processInputQueue();
         m_EngineContext.sceneManager->handleSwitch();
